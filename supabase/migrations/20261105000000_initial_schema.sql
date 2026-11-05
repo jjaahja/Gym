@@ -46,14 +46,14 @@ create type public.movement_pattern as enum (
 
 -- Kategorien wissenschaftlicher Richtwerte.
 -- Übungs-Ebene:   rep_range, rest_interval, proximity_to_failure, tempo, progression,
---                 range_of_motion, intensity_technique, attentional_focus
+--                 autoregulation, range_of_motion, intensity_technique, attentional_focus
 -- Muskel-Ebene:   weekly_volume, session_volume, frequency
--- Plan-Ebene:     deload
+-- Plan-Ebene:     volume_progression, exercise_variation, deload
 create type public.guideline_category as enum (
   'rep_range', 'rest_interval', 'proximity_to_failure', 'tempo', 'progression',
-  'range_of_motion', 'intensity_technique', 'attentional_focus',
+  'autoregulation', 'range_of_motion', 'intensity_technique', 'attentional_focus',
   'weekly_volume', 'session_volume', 'frequency',
-  'deload'
+  'volume_progression', 'exercise_variation', 'deload'
 );
 
 create type public.guideline_unit as enum (
@@ -72,7 +72,8 @@ create type public.guideline_context as enum (
 
 create type public.evidence_grade as enum ('strong', 'moderate', 'limited', 'expert_opinion');
 create type public.source_type as enum (
-  'meta_analysis', 'systematic_review', 'rct', 'position_stand', 'narrative_review', 'expert_consensus'
+  'meta_analysis', 'systematic_review', 'rct', 'observational', 'position_stand', 'narrative_review',
+  'expert_consensus'
 );
 
 create type public.plan_status as enum ('draft', 'active', 'archived');
@@ -93,7 +94,8 @@ create type public.adaptation_type as enum (
 create type public.adaptation_reason as enum (
   'progression_achieved', 'stagnation', 'regression', 'high_fatigue',
   'volume_below_min', 'volume_above_max', 'user_request',
-  'stimulus_feedback'   -- Pump-/Gelenk-Feedback des Nutzers
+  'stimulus_feedback',  -- Pump-/Gelenk-Feedback des Nutzers
+  'mesocycle_end'       -- planmäßige Überprüfung am Ende eines Mesozyklus
 );
 -- Modus je Anpassungstyp siehe docs/adaptions-strategie.md:
 -- Last/Wdh. und Volumen (innerhalb der Richtwerte) → auto_applied, rückgängig → reverted.
@@ -556,7 +558,7 @@ as $$
   join public.exercises e on e.id = p_exercise_id
   where g.is_active
     and g.category in ('rep_range', 'rest_interval', 'proximity_to_failure', 'tempo', 'progression',
-                       'range_of_motion', 'intensity_technique', 'attentional_focus')
+                       'autoregulation', 'range_of_motion', 'intensity_technique', 'attentional_focus')
     and (g.scope_exercise_id      is null or g.scope_exercise_id      = e.id)
     and (g.scope_movement_pattern is null or g.scope_movement_pattern = e.movement_pattern)
     and (g.scope_mechanic         is null or g.scope_mechanic         = e.mechanic)

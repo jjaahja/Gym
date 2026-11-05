@@ -17,6 +17,8 @@ create extension if not exists pgcrypto;  -- gen_random_uuid()
 -- 1. ENUMS
 -- -----------------------------------------------------------------------------
 
+-- hypertrophy = "Muskelaufbau & Optik": Hauptziel der App und Standard im Onboarding.
+-- endurance   = Kraftausdauer (hohe Wiederholungszahlen), kein Cardio-Tracking.
 create type public.training_goal as enum ('hypertrophy', 'strength', 'endurance');
 create type public.experience_level as enum ('beginner', 'intermediate', 'advanced');
 create type public.split_type as enum ('full_body', 'upper_lower', 'push_pull_legs', 'custom');
@@ -27,6 +29,9 @@ create type public.muscle_role as enum ('primary', 'secondary');
 create type public.exercise_mechanic as enum ('compound', 'isolation');
 create type public.exercise_tracking as enum ('weight_reps', 'bodyweight_reps', 'duration');
 create type public.laterality as enum ('bilateral', 'unilateral');
+-- Wo die Übung am schwersten ist. 'lengthened' = Last in gedehnter Muskelposition
+-- (z. B. Overhead-Trizepsdrücken, sitzender Beinbeuger) – für Hypertrophie relevant.
+create type public.resistance_profile as enum ('lengthened', 'mid_range', 'shortened');
 
 -- Bewegungsmuster bzw. Gelenkaktion – Basis für Plan-Generierung und Übungswechsel
 create type public.movement_pattern as enum (
@@ -40,18 +45,22 @@ create type public.movement_pattern as enum (
 );
 
 -- Kategorien wissenschaftlicher Richtwerte.
--- Übungs-Ebene:   rep_range, rest_interval, proximity_to_failure, tempo, progression
+-- Übungs-Ebene:   rep_range, rest_interval, proximity_to_failure, tempo, progression,
+--                 range_of_motion, intensity_technique, attentional_focus
 -- Muskel-Ebene:   weekly_volume, session_volume, frequency
 -- Plan-Ebene:     deload
 create type public.guideline_category as enum (
   'rep_range', 'rest_interval', 'proximity_to_failure', 'tempo', 'progression',
+  'range_of_motion', 'intensity_technique', 'attentional_focus',
   'weekly_volume', 'session_volume', 'frequency',
   'deload'
 );
 
 create type public.guideline_unit as enum (
   'reps', 'seconds', 'rir', 'sets_per_week', 'sets_per_session',
-  'sessions_per_week', 'percent_1rm', 'weeks', 'kg', 'percent'
+  'sessions_per_week', 'percent_1rm', 'weeks', 'kg', 'percent',
+  'sets_per_exercise',
+  'qualitative'   -- reine Text-Empfehlung ohne Zahlenwert (z. B. Fokus auf den Zielmuskel)
 );
 
 create type public.guideline_severity as enum ('info', 'tip', 'warning');
@@ -70,7 +79,12 @@ create type public.plan_status as enum ('draft', 'active', 'archived');
 create type public.progression_scheme as enum ('double_progression', 'linear', 'rir_autoregulated');
 
 create type public.session_status as enum ('in_progress', 'completed', 'abandoned');
-create type public.set_type as enum ('warmup', 'working', 'backoff', 'dropset', 'amrap');
+-- Intensitätstechniken (dropset, myo_reps, rest_pause, lengthened_partials) werden als
+-- eigene Zeilen direkt nach dem Hauptsatz geloggt ("Segmente").
+create type public.set_type as enum (
+  'warmup', 'working', 'backoff', 'amrap',
+  'dropset', 'myo_reps', 'rest_pause', 'lengthened_partials'
+);
 
 create type public.adaptation_type as enum (
   'increase_load', 'decrease_load', 'add_set', 'remove_set',
@@ -78,7 +92,8 @@ create type public.adaptation_type as enum (
 );
 create type public.adaptation_reason as enum (
   'progression_achieved', 'stagnation', 'regression', 'high_fatigue',
-  'volume_below_min', 'volume_above_max', 'user_request'
+  'volume_below_min', 'volume_above_max', 'user_request',
+  'stimulus_feedback'   -- Pump-/Gelenk-Feedback des Nutzers
 );
 create type public.adaptation_status as enum ('suggested', 'accepted', 'rejected', 'auto_applied');
 
@@ -137,6 +152,7 @@ create table public.exercises (
   laterality        public.laterality        not null default 'bilateral',
   tracking_type     public.exercise_tracking not null default 'weight_reps',
   difficulty        public.experience_level  not null default 'beginner',
+  resistance_profile public.resistance_profile, -- NULL = nicht eindeutig zuordenbar
   -- 1 = kaum systemische Ermüdung (Curls), 5 = sehr hoch (Kreuzheben).
   -- Wird für Pausenzeiten, Übungsauswahl und Deload-Logik genutzt.
   systemic_fatigue  smallint not null default 2 check (systemic_fatigue between 1 and 5),
@@ -242,7 +258,7 @@ create table public.scientific_guidelines (
   constraint guideline_range_valid
     check (min_value is null or max_value is null or min_value <= max_value),
   constraint guideline_has_value
-    check (min_value is not null or max_value is not null)
+    check (unit = 'qualitative' or min_value is not null or max_value is not null)
 );
 
 create index scientific_guidelines_lookup_idx
@@ -286,7 +302,7 @@ create trigger profiles_updated_at before update on public.profiles
 create table public.user_assessments (
   id                     uuid primary key default gen_random_uuid(),
   user_id                uuid not null references auth.users(id) on delete cascade,
-  goal                   public.training_goal    not null,
+  goal                   public.training_goal    not null default 'hypertrophy',
   experience_level       public.experience_level not null,
   training_age_months    int check (training_age_months >= 0),
   days_per_week          smallint not null check (days_per_week between 1 and 7),
@@ -367,6 +383,9 @@ create table public.plan_exercises (
   target_load_kg      numeric(6,2) check (target_load_kg >= 0),  -- vom Progressions-Algorithmus gepflegt
   rest_seconds        smallint not null check (rest_seconds between 0 and 900),
   progression_scheme  public.progression_scheme not null default 'double_progression',
+  -- Optionale Intensitätstechnik im letzten Satz ("Pump-Finisher")
+  last_set_technique  public.set_type
+                      check (last_set_technique in ('dropset', 'myo_reps', 'rest_pause', 'lengthened_partials')),
   notes               text,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
@@ -438,6 +457,11 @@ create table public.exercise_logs (
   exercise_id       uuid not null references public.exercises(id) on delete restrict,
   plan_exercise_id  uuid references public.plan_exercises(id) on delete set null, -- NULL = spontan hinzugefügt
   order_index       smallint not null check (order_index >= 0),
+  -- Subjektives Feedback nach der Übung: 0 = kein, 1 = leicht, 2 = deutlich, 3 = extrem.
+  -- Pump ist KEIN belegter Wachstumstreiber, aber ein brauchbares persönliches Signal
+  -- für Übungsauswahl und Volumensteuerung (Evidenz: Expertenmeinung).
+  pump_rating       smallint check (pump_rating between 0 and 3),
+  joint_discomfort  smallint check (joint_discomfort between 0 and 3),
   notes             text,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
@@ -461,11 +485,13 @@ create table public.set_logs (
   rest_seconds      smallint check (rest_seconds between 0 and 3600), -- tatsächliche Pause davor
   is_completed      boolean not null default false,
   completed_at      timestamptz,
-  -- Geschätztes 1RM (Epley, RIR-korrigiert). Nur für 1–12 Wdh. und RIR <= 4
-  -- aussagekräftig – RIR-Schätzungen weit weg vom Versagen sind zu ungenau.
+  -- Geschätztes 1RM (Epley, RIR-korrigiert). Nur für Arbeitssätze mit 1–12 Wdh.
+  -- und RIR <= 4 aussagekräftig – RIR-Schätzungen weit weg vom Versagen sind zu
+  -- ungenau, Technik-Segmente (Drop, Myo …) sind vorermüdet.
   e1rm_kg           numeric(6,2) generated always as (
                       case
-                        when reps between 1 and 12 and weight_kg > 0
+                        when set_type in ('working', 'backoff', 'amrap')
+                             and reps between 1 and 12 and weight_kg > 0
                              and (rir is null or rir <= 4)
                         then round(weight_kg * (1 + (reps + coalesce(rir, 0)) / 30.0), 2)
                       end
@@ -476,6 +502,35 @@ create table public.set_logs (
 );
 
 create trigger set_logs_updated_at before update on public.set_logs
+  for each row execute function public.set_updated_at();
+
+-- -----------------------------------------------------------------------------
+-- 7b. KÖRPERMASSE (optischer Fortschritt)
+-- -----------------------------------------------------------------------------
+
+-- Umfänge zeigen optische Veränderungen direkter als die Waage:
+-- Oberarm/Schultern/Brust ↑ = Muskelaufbau, Taille ↓ = weniger Körperfett.
+-- Immer gleiche Körperseite und Tageszeit messen (Hinweis in der UI).
+create table public.body_measurements (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references auth.users(id) on delete cascade,
+  measured_on       date not null,
+  body_weight_kg    numeric(5,2) check (body_weight_kg > 0),
+  body_fat_percent  numeric(4,1) check (body_fat_percent between 2 and 70),
+  shoulders_cm      numeric(5,1) check (shoulders_cm > 0),
+  chest_cm          numeric(5,1) check (chest_cm > 0),
+  waist_cm          numeric(5,1) check (waist_cm > 0),
+  hips_cm           numeric(5,1) check (hips_cm > 0),
+  arm_cm            numeric(4,1) check (arm_cm > 0),     -- Oberarm, angespannt
+  thigh_cm          numeric(5,1) check (thigh_cm > 0),
+  calf_cm           numeric(4,1) check (calf_cm > 0),
+  notes             text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  unique (user_id, measured_on)
+);
+
+create trigger body_measurements_updated_at before update on public.body_measurements
   for each row execute function public.set_updated_at();
 
 -- -----------------------------------------------------------------------------
@@ -497,7 +552,8 @@ as $$
   from public.scientific_guidelines g
   join public.exercises e on e.id = p_exercise_id
   where g.is_active
-    and g.category in ('rep_range', 'rest_interval', 'proximity_to_failure', 'tempo', 'progression')
+    and g.category in ('rep_range', 'rest_interval', 'proximity_to_failure', 'tempo', 'progression',
+                       'range_of_motion', 'intensity_technique', 'attentional_focus')
     and (g.scope_exercise_id      is null or g.scope_exercise_id      = e.id)
     and (g.scope_movement_pattern is null or g.scope_movement_pattern = e.movement_pattern)
     and (g.scope_mechanic         is null or g.scope_mechanic         = e.mechanic)
@@ -594,15 +650,22 @@ group by ws.user_id, el.exercise_id, ws.id, ws.started_at;
 -- Harte Sätze pro Muskelgruppe und Kalenderwoche (Zeitzone des Nutzers).
 -- "Hart" = Arbeitssatz mit RIR <= 4 (oder ohne RIR-Angabe).
 -- Sekundärmuskeln zählen anteilig über exercise_muscles.contribution.
+-- Segmente von Intensitätstechniken (Drop, Myo, Rest-Pause, Partials) zählen 0,5:
+-- Studien zeigen ähnliches Wachstum wie klassische Sätze, eine exakte Umrechnung
+-- ist aber nicht belegt (Konvention, Expertenmeinung – hier zentral anpassbar).
 create view public.weekly_muscle_volume
 with (security_invoker = true) as
 select
   ws.user_id,
   (date_trunc('week', ws.started_at at time zone p.timezone))::date as week_start,
   em.muscle_group_id,
-  sum(em.contribution)                                     as hard_sets,
-  sum(case when em.role = 'primary' then 1 else 0 end)     as direct_sets
+  sum(em.contribution * f.set_factor)                              as hard_sets,
+  sum(case when em.role = 'primary' then f.set_factor else 0 end)  as direct_sets
 from public.set_logs s
+cross join lateral (
+  select case when s.set_type in ('dropset', 'myo_reps', 'rest_pause', 'lengthened_partials')
+              then 0.5 else 1.0 end as set_factor
+) f
 join public.exercise_logs el    on el.id = s.exercise_log_id
 join public.workout_sessions ws on ws.id = el.session_id
 join public.profiles p          on p.id = ws.user_id
@@ -612,6 +675,24 @@ where ws.status in ('in_progress', 'completed')
   and s.set_type <> 'warmup'
   and (s.rir is null or s.rir <= 4)
 group by ws.user_id, week_start, em.muscle_group_id;
+
+-- Persönliches Feedback je Übung: Welche Übungen geben mir Pump, welche zwicken?
+-- Grundlage für Übungswechsel: bei gleichem Bewegungsmuster die Übung mit
+-- besserem Pump und weniger Gelenkbeschwerden bevorzugen.
+create view public.exercise_feedback_summary
+with (security_invoker = true) as
+select
+  ws.user_id,
+  el.exercise_id,
+  count(el.pump_rating)              as pump_ratings,
+  round(avg(el.pump_rating), 2)      as avg_pump,
+  round(avg(el.joint_discomfort), 2) as avg_joint_discomfort,
+  max(ws.started_at)                 as last_rated_at
+from public.exercise_logs el
+join public.workout_sessions ws on ws.id = el.session_id
+where ws.status = 'completed'
+  and (el.pump_rating is not null or el.joint_discomfort is not null)
+group by ws.user_id, el.exercise_id;
 
 -- -----------------------------------------------------------------------------
 -- 10. AUTOMATISCHES PROFIL BEI REGISTRIERUNG
@@ -690,6 +771,7 @@ alter table public.user_exercise_preferences enable row level security;
 alter table public.training_plans            enable row level security;
 alter table public.plan_adaptations          enable row level security;
 alter table public.workout_sessions          enable row level security;
+alter table public.body_measurements         enable row level security;
 
 create policy "own profile" on public.profiles for all
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
@@ -698,6 +780,8 @@ create policy "own rows" on public.user_assessments for all
 create policy "own rows" on public.user_equipment for all
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy "own rows" on public.user_exercise_preferences for all
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "own rows" on public.body_measurements for all
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy "own rows" on public.training_plans for all
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

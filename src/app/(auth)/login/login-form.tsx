@@ -100,7 +100,7 @@ export function LoginForm() {
             role="tab"
             aria-selected={mode === m}
             onClick={() => setMode(m)}
-            className={`min-h-11 rounded-lg text-sm font-semibold ${mode === m ? "bg-surface shadow-sm" : "text-muted"}`}
+            className={`min-h-11 rounded-lg text-sm font-semibold ${mode === m ? "bg-accent text-accent-fg shadow-sm" : "text-muted hover:text-fg"}`}
           >
             {m === "signin" ? "Anmelden" : "Registrieren"}
           </button>

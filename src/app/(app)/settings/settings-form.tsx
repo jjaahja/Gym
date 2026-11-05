@@ -31,7 +31,7 @@ function Segmented<T extends string>({
             aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
             className={`min-h-11 rounded-lg text-sm font-semibold transition-colors ${
-              value === option.value ? "bg-surface text-fg shadow-sm" : "text-muted"
+              value === option.value ? "bg-accent text-accent-fg shadow-sm" : "text-muted hover:text-fg"
             }`}
           >
             {option.label}

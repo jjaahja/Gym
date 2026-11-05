@@ -1,30 +1,81 @@
 import Dexie, { type DexieOptions, type EntityTable } from "dexie";
+import type { SetType } from "@/lib/db/enums";
 
 // Lokale IndexedDB-Datenbank. Im Gym ist der Empfang oft schlecht:
 // Jede Änderung am Training landet zuerst hier in der "Outbox" und wird
 // in genau dieser Reihenfolge an Supabase übertragen, sobald Netz da ist.
 
-export type SyncTable = "workout_sessions" | "exercise_logs" | "set_logs";
+export type SyncTable =
+  | "profiles"
+  | "user_assessments"
+  | "user_equipment"
+  | "training_plans"
+  | "plan_days"
+  | "plan_exercises"
+  | "plan_adaptations"
+  | "workout_sessions"
+  | "exercise_logs"
+  | "set_logs";
 
 export interface OutboxEntry {
   seq?: number;
   table: SyncTable;
   op: "upsert" | "delete";
   rowId: string;
-  /** Vollständige Zeile (snake_case, wie in der DB). Nie Teil-Updates, damit Replays idempotent sind. */
+  /**
+   * upsert: vollständige Zeile (snake_case, wie in der DB) – Replays bleiben idempotent.
+   * delete: Bedingung, z. B. { id } oder { user_id } (leer = { id: rowId }).
+   */
   payload: Record<string, unknown>;
   createdAt: number;
   attempts: number;
   lastError?: string;
 }
 
+/** Abgeschlossenes Training – lokale Historie für „Letztes Mal“ und Auswertungen (offline, auch im Demo-Modus). */
+export interface CompletedSet {
+  id: string;
+  setIndex: number;
+  setType: SetType;
+  weightKg: number | null;
+  reps: number | null;
+  durationSeconds: number | null;
+  rir: number | null;
+}
+
+export interface CompletedExercise {
+  logId: string;
+  exerciseId: string;
+  planExerciseId: string | null;
+  pumpRating: number | null;
+  jointDiscomfort: number | null;
+  sets: CompletedSet[];
+}
+
+export interface CompletedSession {
+  id: string;
+  planId: string | null;
+  planDayId: string | null;
+  startedAt: string;
+  endedAt: string;
+  sessionRpe: number | null;
+  /** Für den Index „Sessions mit Übung X“ */
+  exerciseIds: string[];
+  exercises: CompletedExercise[];
+}
+
 export class GymDB extends Dexie {
   outbox!: EntityTable<OutboxEntry, "seq">;
+  sessions!: EntityTable<CompletedSession, "id">;
 
   constructor(name = "gym", options?: DexieOptions) {
     super(name, options);
     this.version(1).stores({
       outbox: "++seq, table, rowId",
+    });
+    this.version(2).stores({
+      outbox: "++seq, table, rowId",
+      sessions: "id, endedAt, *exerciseIds",
     });
   }
 }

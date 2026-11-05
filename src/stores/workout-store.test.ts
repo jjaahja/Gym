@@ -36,7 +36,7 @@ describe("Workout-Store", () => {
     store.getState().logSet(logId, { weightKg: 82.5, reps: 8, rir: 2 });
     store.getState().logSet(logId, { weightKg: 60, reps: 10, rir: 0, setType: "dropset" });
     store.getState().rateExercise(logId, { pumpRating: 3, jointDiscomfort: 0 });
-    store.getState().finish();
+    const snapshot = store.getState().finish({ sessionRpe: 8 });
 
     expect(entries.map((e) => `${e.op}:${e.table}`)).toEqual([
       "upsert:workout_sessions",
@@ -56,14 +56,18 @@ describe("Workout-Store", () => {
       set_type: "working",
       weight_kg: 82.5,
       reps: 8,
+      duration_seconds: null,
       rir: 2,
       is_completed: true,
       completed_at: "2026-11-05T18:00:00.000Z",
     });
     expect(entries[3].payload).toMatchObject({ set_index: 1, set_type: "dropset" });
     expect(entries[4].payload).toMatchObject({ pump_rating: 3, joint_discomfort: 0 });
-    expect(entries[5].payload).toMatchObject({ status: "completed", ended_at: "2026-11-05T18:00:00.000Z" });
+    expect(entries[5].payload).toMatchObject({ status: "completed", ended_at: "2026-11-05T18:00:00.000Z", session_rpe: 8 });
     expect(store.getState().session).toBeNull();
+    expect(snapshot).toMatchObject({ id: sessionId, sessionRpe: 8, exerciseIds: ["bench-press"] });
+    expect(snapshot.exercises[0]).toMatchObject({ logId, pumpRating: 3 });
+    expect(snapshot.exercises[0].sets.map((s) => s.setType)).toEqual(["working", "dropset"]);
   });
 
   it("schickt keine generierten Spalten mit", () => {
@@ -101,6 +105,31 @@ describe("Workout-Store", () => {
     expect(() => store.getState().logSet(logId, { weightKg: 100, reps: 5.5, rir: 2 })).toThrow(RangeError);
     expect(() => store.getState().logSet(logId, { weightKg: 100, reps: 5, rir: 11 })).toThrow(RangeError);
     expect(() => store.getState().rateExercise(logId, { pumpRating: 4 })).toThrow(RangeError);
+  });
+
+  it("legt Planübungen erst beim ersten Satz an und findet sie danach wieder", () => {
+    const { store, entries } = setup();
+    store.getState().start({ userId: "user-1", planId: "plan-1", planDayId: "day-1" });
+    const a = store.getState().ensureExercise("squat", "pe-1");
+    const b = store.getState().ensureExercise("squat", "pe-1");
+    const free = store.getState().ensureExercise("curl");
+    expect(a).toBe(b);
+    expect(free).not.toBe(a);
+    expect(entries.filter((e) => e.table === "exercise_logs")).toHaveLength(2);
+    expect(entries[0].payload).toMatchObject({ plan_id: "plan-1", plan_day_id: "day-1" });
+  });
+
+  it("speichert Zeitübungen mit Dauer und lässt leere Übungen aus dem Snapshot", () => {
+    const { store, entries } = setup();
+    store.getState().start({ userId: "user-1" });
+    const plank = store.getState().addExercise("plank");
+    store.getState().addExercise("skipped");
+    store.getState().logSet(plank, { weightKg: null, reps: null, rir: null, durationSeconds: 60 });
+    expect(entries.at(-1)?.payload).toMatchObject({ duration_seconds: 60, reps: null });
+    expect(() => store.getState().logSet(plank, { weightKg: null, reps: null, rir: null, durationSeconds: 5000 })).toThrow(RangeError);
+    const snapshot = store.getState().finish();
+    expect(snapshot.exerciseIds).toEqual(["plank"]);
+    expect(() => setup().store.getState().finish()).toThrow();
   });
 
   it("verhindert zwei parallele Trainings", () => {

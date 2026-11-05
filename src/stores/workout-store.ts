@@ -1,6 +1,7 @@
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { createStore } from "zustand/vanilla";
 import type { SessionStatus, SetType } from "@/lib/db/enums";
+import type { CompletedSession } from "@/lib/offline/db";
 import type { NewOutboxEntry } from "@/lib/offline/outbox";
 
 // Zustand des laufenden Trainings. Lebt im Browser (überlebt Reloads und Funkloch)
@@ -12,6 +13,7 @@ export interface LoggedSet {
   setType: SetType;
   weightKg: number | null;
   reps: number | null;
+  durationSeconds: number | null;
   rir: number | null;
   isCompleted: boolean;
   completedAt: string | null;
@@ -42,12 +44,16 @@ export interface SetInput {
   weightKg: number | null;
   reps: number | null;
   rir: number | null;
+  /** nur bei Zeitübungen (z. B. Plank) */
+  durationSeconds?: number | null;
 }
 
 export interface WorkoutState {
   session: ActiveSession | null;
   start(options: { userId: string | null; planId?: string | null; planDayId?: string | null }): string;
   addExercise(exerciseId: string, planExerciseId?: string | null): string;
+  /** Liefert den Log der Übung – legt ihn beim ersten Satz an (Planübungen ohne Satz erzeugen keine leeren Einträge). */
+  ensureExercise(exerciseId: string, planExerciseId?: string | null): string;
   logSet(exerciseLogId: string, input: SetInput): string;
   updateSet(exerciseLogId: string, setId: string, input: Partial<SetInput>): void;
   removeSet(exerciseLogId: string, setId: string): void;
@@ -55,7 +61,8 @@ export interface WorkoutState {
     exerciseLogId: string,
     rating: { pumpRating?: number | null; jointDiscomfort?: number | null },
   ): void;
-  finish(): void;
+  /** Beendet das Training und liefert den Snapshot für die lokale Historie. */
+  finish(options?: { sessionRpe?: number | null }): CompletedSession;
   discard(): void;
 }
 
@@ -68,7 +75,7 @@ export interface WorkoutStoreDeps {
 
 // ---------- Abbildung auf DB-Zeilen (snake_case, ohne generierte Spalten) ----------
 
-function sessionRow(s: ActiveSession, status: SessionStatus, endedAt: string | null) {
+function sessionRow(s: ActiveSession, status: SessionStatus, endedAt: string | null, sessionRpe: number | null = null) {
   return {
     id: s.id,
     user_id: s.userId,
@@ -77,6 +84,7 @@ function sessionRow(s: ActiveSession, status: SessionStatus, endedAt: string | n
     status,
     started_at: s.startedAt,
     ended_at: endedAt,
+    session_rpe: sessionRpe,
   };
 }
 
@@ -101,6 +109,7 @@ function setRow(exerciseLogId: string, s: LoggedSet) {
     set_type: s.setType,
     weight_kg: s.weightKg,
     reps: s.reps,
+    duration_seconds: s.durationSeconds,
     rir: s.rir,
     is_completed: s.isCompleted,
     completed_at: s.completedAt,
@@ -110,7 +119,10 @@ function setRow(exerciseLogId: string, s: LoggedSet) {
 // ---------- Validierung (spiegelt die CHECK-Constraints) ----------
 
 function validateSet(input: Partial<SetInput>): void {
-  const { weightKg, reps, rir } = input;
+  const { weightKg, reps, rir, durationSeconds } = input;
+  if (durationSeconds != null && !(Number.isInteger(durationSeconds) && durationSeconds >= 0 && durationSeconds <= 3600)) {
+    throw new RangeError("Dauer muss zwischen 0 und 3600 Sekunden liegen");
+  }
   if (weightKg != null && !(weightKg >= 0 && weightKg <= 9999.99)) {
     throw new RangeError("Gewicht muss zwischen 0 und 9999,99 kg liegen");
   }
@@ -208,6 +220,14 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
             return exercise.id;
           },
 
+          ensureExercise(exerciseId, planExerciseId = null) {
+            const session = requireSession();
+            const existing = session.exercises.find((e) =>
+              planExerciseId ? e.planExerciseId === planExerciseId : e.exerciseId === exerciseId && !e.planExerciseId,
+            );
+            return existing ? existing.id : get().addExercise(exerciseId, planExerciseId);
+          },
+
           logSet(exerciseLogId, input) {
             validateSet(input);
             const session = requireSession();
@@ -218,6 +238,7 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               setType: input.setType ?? "working",
               weightKg: round2(input.weightKg),
               reps: input.reps,
+              durationSeconds: input.durationSeconds ?? null,
               rir: input.rir,
               isCompleted: true,
               completedAt: now().toISOString(),
@@ -238,6 +259,7 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               ...current,
               ...input,
               weightKg: input.weightKg === undefined ? current.weightKg : round2(input.weightKg),
+              durationSeconds: input.durationSeconds === undefined ? current.durationSeconds : input.durationSeconds,
               setType: input.setType ?? current.setType,
             };
             const next = replaceExercise(session, {
@@ -258,7 +280,7 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
             const renumbered = remaining.map((s, i) => (s.setIndex === i ? s : { ...s, setIndex: i }));
             const next = replaceExercise(session, { ...exercise, sets: renumbered });
             set({ session: next });
-            emit(next, { table: "set_logs", op: "delete", rowId: setId, payload: {} });
+            emit(next, { table: "set_logs", op: "delete", rowId: setId, payload: { id: setId } });
             renumbered
               .filter((s, i) => s !== remaining[i])
               .forEach((s) => emitSet(next, exerciseLogId, s));
@@ -285,15 +307,42 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
             });
           },
 
-          finish() {
+          finish(options = {}) {
             const session = requireSession();
+            const endedAt = now().toISOString();
+            const sessionRpe = options.sessionRpe ?? null;
+            if (sessionRpe != null && !(sessionRpe >= 1 && sessionRpe <= 10)) {
+              throw new RangeError("Session-RPE muss zwischen 1 und 10 liegen");
+            }
             emit(session, {
               table: "workout_sessions",
               op: "upsert",
               rowId: session.id,
-              payload: sessionRow(session, "completed", now().toISOString()),
+              payload: sessionRow(session, "completed", endedAt, sessionRpe),
             });
             set({ session: null });
+            const exercises = session.exercises.filter((e) => e.sets.some((s) => s.isCompleted));
+            return {
+              id: session.id,
+              planId: session.planId,
+              planDayId: session.planDayId,
+              startedAt: session.startedAt,
+              endedAt,
+              sessionRpe,
+              exerciseIds: [...new Set(exercises.map((e) => e.exerciseId))],
+              exercises: exercises.map((e) => ({
+                logId: e.id,
+                exerciseId: e.exerciseId,
+                planExerciseId: e.planExerciseId,
+                pumpRating: e.pumpRating,
+                jointDiscomfort: e.jointDiscomfort,
+                sets: e.sets
+                  .filter((s) => s.isCompleted)
+                  .map(({ id, setIndex, setType, weightKg, reps, durationSeconds, rir }) => ({
+                    id, setIndex, setType, weightKg, reps, durationSeconds, rir,
+                  })),
+              })),
+            };
           },
 
           discard() {
@@ -311,7 +360,13 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
       },
       {
         name: "gym-active-workout",
-        version: 1,
+        version: 2,
+        // v1 kannte noch keine Dauer pro Satz
+        migrate: (persisted) => {
+          const state = persisted as { session: ActiveSession | null };
+          state.session?.exercises.forEach((e) => e.sets.forEach((s) => (s.durationSeconds ??= null)));
+          return state as unknown as WorkoutState;
+        },
         storage: createJSONStorage(deps.storage ?? (() => localStorage)),
         partialize: (state) => ({ session: state.session }),
         // Rehydrierung erst nach dem ersten Render (StoreHydration), sonst Hydration-Mismatch

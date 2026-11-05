@@ -6,7 +6,7 @@ export type NewOutboxEntry = Pick<OutboxEntry, "table" | "op" | "rowId" | "paylo
 /** Ziel der Synchronisierung – in der App Supabase, in Tests ein Fake. */
 export interface SyncBackend {
   upsert(table: string, row: Record<string, unknown>): Promise<void>;
-  remove(table: string, id: string): Promise<void>;
+  remove(table: string, match: Record<string, unknown>): Promise<void>;
 }
 
 export interface FlushResult {
@@ -34,7 +34,8 @@ export async function flushOutbox(db: GymDB, backend: SyncBackend): Promise<Flus
       if (entry.op === "upsert") {
         await backend.upsert(entry.table, entry.payload);
       } else {
-        await backend.remove(entry.table, entry.rowId);
+        const match = Object.keys(entry.payload).length > 0 ? entry.payload : { id: entry.rowId };
+        await backend.remove(entry.table, match);
       }
       await db.outbox.delete(entry.seq!);
       synced++;
@@ -64,8 +65,8 @@ export function supabaseBackend(client: SupabaseClient): SyncBackend {
       const { error } = await client.from(table).upsert(row);
       if (error) throw new Error(error.message);
     },
-    async remove(table, id) {
-      const { error } = await client.from(table).delete().eq("id", id);
+    async remove(table, match) {
+      const { error } = await client.from(table).delete().match(match);
       if (error) throw new Error(error.message);
     },
   };

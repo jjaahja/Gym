@@ -142,7 +142,7 @@ Nutzer-ID, und nur dieser Nutzer sieht sie.
 | `training_plans` | Split, Ziel, Mesozyklus-Länge, aktuelle Woche. Maximal **ein aktiver Plan** pro Nutzer (Unique-Index). `parent_plan_id` hält die Herkunft bei Neugenerierung fest. |
 | `plan_days` | z. B. „Push A“, „Upper 1“ |
 | `plan_exercises` | Vorgabe je Übung: Sätze, Wdh.-Bereich, RIR-Bereich, Pause, **`target_load_kg`** (wird vom Progressions-Algorithmus gepflegt), Progressionsschema, **`last_set_technique`** (Pump-Finisher) |
-| `plan_adaptations` | **Protokoll jeder Anpassung**: Typ (Last ↑, Satz +, Übungswechsel, Deload …), Grund (Stagnation, Ziel erreicht, Pump-/Gelenk-Feedback …), Vorher/Nachher (JSON), auslösender Richtwert, Status (vorgeschlagen/angenommen/abgelehnt/automatisch) |
+| `plan_adaptations` | **Protokoll jeder Anpassung**: Typ (Last ↑, Satz +, Übungswechsel, Deload …), Grund (Stagnation, Ziel erreicht, Pump-/Gelenk-Feedback …), Vorher/Nachher (JSON), auslösender Richtwert, Status (vorgeschlagen/angenommen/abgelehnt/automatisch/rückgängig gemacht). Welche Anpassung automatisch passiert: [Adaptions-Strategie](adaptions-strategie.md) |
 
 ### E. Logs (Ist)
 

@@ -95,7 +95,10 @@ create type public.adaptation_reason as enum (
   'volume_below_min', 'volume_above_max', 'user_request',
   'stimulus_feedback'   -- Pump-/Gelenk-Feedback des Nutzers
 );
-create type public.adaptation_status as enum ('suggested', 'accepted', 'rejected', 'auto_applied');
+-- Modus je Anpassungstyp siehe docs/adaptions-strategie.md:
+-- Last/Wdh. und Volumen (innerhalb der Richtwerte) → auto_applied, rückgängig → reverted.
+-- Übungswechsel, Deload, Volumen über Richtwert-Maximum → suggested → accepted/rejected.
+create type public.adaptation_status as enum ('suggested', 'accepted', 'rejected', 'auto_applied', 'reverted');
 
 create type public.exercise_preference as enum ('favorite', 'avoid');
 create type public.effort_scale as enum ('rir', 'rpe');

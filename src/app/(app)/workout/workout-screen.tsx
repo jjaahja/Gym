@@ -92,8 +92,8 @@ function RunningWorkout() {
 
       <Card>
         <p className="text-sm text-muted">
-          Übungen hinzufügen und Sätze eintragen kommt mit der Übungs-Datenbank (Schritt 3) und dem Live-Tracker
-          (Schritt 4).
+          Übungen hinzufügen und Sätze eintragen – mit Gewichtsvorschlag und „Letztes Mal“-Werten – kommt mit dem
+          Live-Tracker in Schritt 4.
         </p>
       </Card>
 

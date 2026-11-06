@@ -155,7 +155,12 @@ async function main() {
   workout.getState().start({ userId: USER });
   workout.getState().discard();
   clock = new Date("2026-12-09T08:00:00Z");
-  plans.getState().createPlan({ userId: USER, assessment: { ...assessment, daysPerWeek: 3 }, generated: generatePlan({ ...assessment, daysPerWeek: 3 }) });
+  plans.getState().createPlan({
+    userId: USER,
+    assessment: { ...assessment, daysPerWeek: 3 },
+    generated: generatePlan({ ...assessment, daysPerWeek: 3 }),
+    weekdays: [1, 3, 5],
+  });
 
   // ── Erwartungen aus der App-Logik ──
   const sessions = await db.sessions.toArray();
@@ -271,6 +276,33 @@ begin
     raise notice 'Sync-Vertrag OK: ${entries.length} Outbox-Einträge unter RLS übernommen (% Sessions, % Sätze, % Planübungen, % Anpassungen, % Messungen); Volumen, e1RM, „Letztes Mal“, Mesozyklus und Körpermaße identisch zur App', v.sessions, v.sets, v.plan_ex, v.adaptations, v.measures;
   end loop;
 end $$;`);
+  // Kalender-Abo: Nutzer legt seinen Link an (RLS), Kalender-App ruft ohne Anmeldung ab (anon)
+  const FEED_TOKEN = "Kx7_contract-Token-0123456789abcdefghijklmnopq";
+  sql.push(
+    `insert into public.calendar_feeds (user_id, token, event_time, reminder_minutes) values ('${USER}', '${FEED_TOKEN}', '07:30', 15);`,
+    "set local role anon;",
+    "set local request.jwt.claim.sub = '';",
+    `do $$
+declare f jsonb;
+begin
+  f := public.calendar_feed('${FEED_TOKEN}');
+  if f is null then raise exception 'Kalender-Abo: Feed fehlt'; end if;
+  if f->>'event_time' <> '07:30' or (f->>'reminder_minutes')::int <> 15 then raise exception 'Kalender-Abo: Einstellungen falsch'; end if;
+  if jsonb_array_length(f->'plan'->'days') <> 3 then raise exception 'Kalender-Abo: erwartet 3 Tage'; end if;
+  if (select string_agg(d->>'weekday', ',' order by (d->>'weekday')::int) from jsonb_array_elements(f->'plan'->'days') d) <> '1,3,5' then
+    raise exception 'Kalender-Abo: Wochentage falsch';
+  end if;
+  if (select count(*) from jsonb_array_elements(f->'plan'->'days') d, jsonb_array_elements(d->'exercises') e) = 0 then
+    raise exception 'Kalender-Abo: Übungen fehlen';
+  end if;
+  if public.calendar_feed('kurz') is not null or public.calendar_feed(repeat('b', 43)) is not null or public.calendar_feed(null) is not null then
+    raise exception 'Kalender-Abo: ungültiger Token liefert Daten';
+  end if;
+  if (select count(*) from public.calendar_feeds) <> 0 then raise exception 'Kalender-Abo: anon sieht Tokens'; end if;
+  if (select count(*) from public.training_plans) <> 0 then raise exception 'Kalender-Abo: anon sieht Pläne'; end if;
+  raise notice 'Kalender-Abo OK: Feed nur mit gültigem Token, % Tage mit Wochentagen, Tokens und Pläne für anon unsichtbar', jsonb_array_length(f->'plan'->'days');
+end $$;`,
+  );
   sql.push("commit;");
   console.log(sql.join("\n"));
 

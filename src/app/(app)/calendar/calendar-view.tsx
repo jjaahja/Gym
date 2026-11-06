@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { Sheet } from "@/components/sheet";
 import { buttonStyles, ButtonLink, Card } from "@/components/ui";
-import { buildIcs } from "@/lib/calendar-export";
+import { buildIcs, scheduleFromPlan } from "@/lib/calendar-export";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { SubscriptionSheet } from "./subscription-sheet";
 import { getExerciseById } from "@/lib/catalog";
 import { getDb, type CompletedSession } from "@/lib/offline/db";
 import { allSessions } from "@/lib/offline/history";
@@ -33,6 +35,7 @@ function Calendar() {
   const [cursor, setCursor] = useState(() => ({ year: now.getFullYear(), month: now.getMonth() }));
   const [selected, setSelected] = useState(() => localDay(now));
   const [exportOpen, setExportOpen] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   if (sessions == null) return <Card className="h-80 animate-pulse">{null}</Card>;
 
@@ -94,10 +97,15 @@ function Calendar() {
         <Card>
           <h2 className="font-semibold">In deinen Handy-Kalender</h2>
           <p className="mt-1 text-sm text-muted">
-            Trainingstage als wiederkehrende Termine mit Erinnerung – für Apple Kalender, Google Kalender oder Outlook.
+            Trainingstage als Termine mit Erinnerung – für Apple Kalender, Google Kalender oder Outlook.
           </p>
-          <button type="button" className={`${buttonStyles.secondary} mt-3 w-full`} onClick={() => setExportOpen(true)}>
-            Termine exportieren
+          {isSupabaseConfigured && (
+            <button type="button" className={`${buttonStyles.primary} mt-3 w-full`} onClick={() => setSubscribeOpen(true)}>
+              Abonnieren – bleibt automatisch aktuell
+            </button>
+          )}
+          <button type="button" className={`${buttonStyles.secondary} mt-2 w-full`} onClick={() => setExportOpen(true)}>
+            Einmalig exportieren
           </button>
         </Card>
       ) : plan ? (
@@ -110,6 +118,7 @@ function Calendar() {
       ) : null}
 
       {plan && exportOpen && <ExportSheet plan={plan} open={exportOpen} onClose={() => setExportOpen(false)} />}
+      {subscribeOpen && <SubscriptionSheet open={subscribeOpen} onClose={() => setSubscribeOpen(false)} />}
     </div>
   );
 }
@@ -229,7 +238,7 @@ function ExportSheet({ plan, open, onClose }: { plan: StoredPlan; open: boolean;
   const [reminder, setReminder] = useState(30);
 
   function download() {
-    const ics = buildIcs(plan, { time, reminderMinutes: reminder, now: new Date(), appUrl: window.location.origin });
+    const ics = buildIcs(scheduleFromPlan(plan), { time, reminderMinutes: reminder, now: new Date(), appUrl: window.location.origin });
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;

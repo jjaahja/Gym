@@ -27,6 +27,7 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **5. Datenvisualisierung & Mesozyklus-Abschluss** (Kraft, Wochenvolumen, Körpermaße, Pump; Volumen-, Deload- und Wechselentscheidungen) – [Doku](docs/05-fortschritt-und-mesozyklus.md)
 - [x] **6. Geräte-Abgleich** (Server → Gerät: Plan, Protokoll, Trainings, Körpermaße, Einstellungen; Kontowechsel) – [Doku](docs/06-geraete-abgleich.md)
 - [x] **7. Veröffentlichung** (Vercel + Supabase, live getestet mit zwei Geräten) – [Doku](docs/07-veroeffentlichung.md)
+- [x] **8. Wochenplan, Kalender, Übungstausch & Videos** (Wochentage, neue Übersicht, Monatskalender mit Export, Tausch im Training, 65 geprüfte Ausführungsvideos, Machbarkeit Withings/Apple Health/Google Fit) – [Doku](docs/08-wochenplan-kalender-videos.md) – *wartet auf Freigabe*
 
 ## Tech-Stack
 

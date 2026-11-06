@@ -21,8 +21,8 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **1. Datenbank-Schema & Datenmodelle** – [Doku](docs/01-datenbank-schema.md), [SQL](supabase/migrations/20261105000000_initial_schema.sql), [Adaptions-Strategie](docs/adaptions-strategie.md)
 - [x] **2. Setup & Boilerplate** – [Doku](docs/02-setup-architektur.md)
 - [x] **3. Übungs-Datenbank, wissenschaftliche Richtwerte & Plan-Generierung** – [Doku](docs/03-katalog-und-logik.md)
-- [x] **4. UI: Onboarding, Dashboard, Live-Workout-Tracker** – [Doku](docs/04-oberflaeche-und-tracker.md) – *wartet auf Freigabe*
-- [ ] 5. Datenvisualisierung (Kraft-, Volumen- und Körpermaß-Verlauf)
+- [x] **4. UI: Onboarding, Dashboard, Live-Workout-Tracker** – [Doku](docs/04-oberflaeche-und-tracker.md)
+- [x] **5. Datenvisualisierung & Mesozyklus-Abschluss** (Kraft, Wochenvolumen, Körpermaße, Pump; Volumen-, Deload- und Wechselentscheidungen) – [Doku](docs/05-fortschritt-und-mesozyklus.md) – *wartet auf Freigabe*
 
 ## Tech-Stack
 

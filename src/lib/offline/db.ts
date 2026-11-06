@@ -15,7 +15,8 @@ export type SyncTable =
   | "plan_adaptations"
   | "workout_sessions"
   | "exercise_logs"
-  | "set_logs";
+  | "set_logs"
+  | "body_measurements";
 
 export interface OutboxEntry {
   seq?: number;
@@ -59,14 +60,34 @@ export interface CompletedSession {
   startedAt: string;
   endedAt: string;
   sessionRpe: number | null;
+  /** Deload-Woche: zählt zum Volumen, nicht für Stagnation/Rückgang */
+  deload?: boolean;
   /** Für den Index „Sessions mit Übung X“ */
   exerciseIds: string[];
   exercises: CompletedExercise[];
 }
 
+/** Körpermaße eines Tages (cm bzw. kg/%). */
+export interface Measurement {
+  id: string;
+  /** YYYY-MM-DD */
+  measuredOn: string;
+  bodyWeightKg: number | null;
+  bodyFatPercent: number | null;
+  shouldersCm: number | null;
+  chestCm: number | null;
+  waistCm: number | null;
+  hipsCm: number | null;
+  armCm: number | null;
+  thighCm: number | null;
+  calfCm: number | null;
+  notes: string | null;
+}
+
 export class GymDB extends Dexie {
   outbox!: EntityTable<OutboxEntry, "seq">;
   sessions!: EntityTable<CompletedSession, "id">;
+  measurements!: EntityTable<Measurement, "id">;
 
   constructor(name = "gym", options?: DexieOptions) {
     super(name, options);
@@ -76,6 +97,11 @@ export class GymDB extends Dexie {
     this.version(2).stores({
       outbox: "++seq, table, rowId",
       sessions: "id, endedAt, *exerciseIds",
+    });
+    this.version(3).stores({
+      outbox: "++seq, table, rowId",
+      sessions: "id, endedAt, *exerciseIds",
+      measurements: "id, measuredOn",
     });
   }
 }

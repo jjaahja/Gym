@@ -1,15 +1,20 @@
 import { getExerciseById } from "@/lib/catalog";
 import type { CompletedSession, GymDB } from "@/lib/offline/db";
-import { recentPerformances, saveSession } from "@/lib/offline/history";
+import { allSessions, recentPerformances, saveSession } from "@/lib/offline/history";
+import { buildPostWorkoutChecks } from "@/lib/training/mesocycle";
 import { evaluateDoubleProgression } from "@/lib/training/progression";
 import { findPlanExercise, type AdaptationRecord, type PlanStore } from "@/stores/plan-store";
 import type { WorkoutStore } from "@/stores/workout-store";
 
-// Trainingsabschluss: Session speichern, doppelte Progression je Planübung anwenden, nächsten Tag vormerken.
+// Trainingsabschluss: Session speichern, doppelte Progression je Planübung anwenden (nicht in der
+// Deload-Woche), Gelenkbeschwerden/Ermüdung prüfen, nächsten Tag vormerken.
 
 export interface CompletionResult {
   session: CompletedSession;
+  /** Automatisch angewendet (Last) */
   adaptations: AdaptationRecord[];
+  /** Neue Vorschläge (Übungswechsel, Deload) – warten auf Entscheidung */
+  suggestions: AdaptationRecord[];
 }
 
 export async function completeWorkout(deps: {
@@ -22,10 +27,12 @@ export async function completeWorkout(deps: {
   await saveSession(deps.db, session);
 
   const adaptations: AdaptationRecord[] = [];
+  const suggestions: AdaptationRecord[] = [];
   const plan = deps.plans.getState().plan;
-  if (!plan || session.planId !== plan.id) return { session, adaptations };
+  if (!plan || session.planId !== plan.id) return { session, adaptations, suggestions };
 
-  for (const logged of session.exercises) {
+  // Deload: bewusst leichter – keine Laständerung, kein Rückschluss auf Leistung
+  for (const logged of session.deload ? [] : session.exercises) {
     if (!logged.planExerciseId) continue;
     const found = findPlanExercise(plan, logged.planExerciseId);
     const exercise = getExerciseById(logged.exerciseId);
@@ -55,7 +62,23 @@ export async function completeWorkout(deps: {
     }
   }
 
-  const day = plan.days.find((d) => d.id === session.planDayId);
+  const current = deps.plans.getState().plan!;
+  const checks = buildPostWorkoutChecks({
+    plan: current,
+    sessions: await allSessions(deps.db),
+    now: new Date(session.endedAt),
+    adaptations: deps.plans.getState().adaptations,
+  });
+  for (const swap of checks.swaps) {
+    const added = deps.plans.getState().addSuggestion({ proposal: swap.proposal, planExerciseId: swap.planExerciseId });
+    if (added) suggestions.push(added);
+  }
+  if (checks.deload) {
+    const added = deps.plans.getState().addSuggestion({ proposal: checks.deload, planExerciseId: null });
+    if (added) suggestions.push(added);
+  }
+
+  const day = current.days.find((d) => d.id === session.planDayId);
   if (day) deps.plans.getState().advanceDay(day.dayIndex);
-  return { session, adaptations };
+  return { session, adaptations, suggestions };
 }

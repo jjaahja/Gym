@@ -51,21 +51,31 @@ Hinweis mit **„Rückgängig“** (Status `reverted`).
   - Leistung steigt und es gibt keine Warnsignale → **+20 %** (mindestens +1, höchstens +2 Sätze pro Woche),
     gedeckelt auf das Maximum.
   - Leistung sinkt, oder es treten Ermüdung bzw. Gelenkbeschwerden auf → **−20 %**, nicht unter das Minimum.
+    Gelenkbeschwerden werden zuerst über die Übung gelöst (Wechselvorschlag); das Volumen sinkt deshalb nur, wenn es
+    für die betroffene Übung keine Alternative gibt.
   - Unter dem Minimum → automatisch auf das Minimum anheben.
   - Über dem Maximum → nur **Vorschlag**, zu reduzieren.
   - Sonst bleibt das Volumen gleich.
 - Toleranz: Ein halber Satz unter dem Minimum gilt noch als erreicht (Zählgenauigkeit fraktionaler Sätze).
+- **Umsetzung im Plan** (`distributeVolumeChange`): Die Satzänderung wird auf Übungen verteilt, die den Muskel
+  direkt (primär) trainieren – immer auf die Übung mit den wenigsten Sätzen, bei Gleichstand zuerst Isolationsübungen.
+  Je Übung bleiben es 2–5 Sätze. Vorher/Nachher-Satzzahlen stehen im Protokoll, „Rückgängig“ stellt sie wieder her.
 
 ### 4. Übungswechsel – `swapTrigger`, `findReplacement`
 
 - **Ankerübungen** bleiben mindestens einen Mesozyklus lang im Plan, weil Kraftzuwächse übungsspezifisch sind.
 - **Auslöser:**
   - **Gelenkbeschwerden ≥ 2** in den letzten zwei Einheiten → sofort ein Vorschlag.
-  - **Stagnation** (kein neuer Bestwert über drei Einheiten) → Vorschlag zum Ende des Mesozyklus.
+  - **Stagnation** (kein neuer Bestwert über drei Einheiten) → Vorschlag zum Ende des Mesozyklus, **höchstens zwei**
+    je Mesozyklus, zuerst Übungen mit schwachem Pump. Gezielt variieren statt alles auf einmal – sonst ist Fortschritt
+    nicht mehr messbar (Richtwert `exercise_variation.planned`).
+  - Ein abgelehnter Vorschlag kommt erst wieder, wenn **neue** Einheiten den Auslöser erneut zeigen.
 - **Ersatzübung:**
   - Gleiches Bewegungsmuster und gleicher Primärmuskel. Gibt es keine, dann gleiche Mechanik und gleicher Muskel.
   - Mit deiner Ausstattung möglich, nicht als „vermeiden“ markiert und nicht schon im Plan.
   - Bevorzugt: Dehnungsfokus, guter persönlicher Pump, keine Gelenkbeschwerden.
+- **Beim Annehmen** bekommt die neue Übung ihre eigene Vorgabe aus den Richtwerten (Wiederholungen, RIR, Pause),
+  behält Satzzahl und Position und startet ohne Zielgewicht (wird im ersten Training ermittelt).
 
 ### 5. Deload – `checkDeload`, `buildDeloadWeek`
 
@@ -74,7 +84,10 @@ Hinweis mit **„Rückgängig“** (Status `reverted`).
     liegt im Schnitt bei 9 oder höher.
   - **Am Ende eines Mesozyklus:** Seit mindestens 5 Wochen gab es keine leichtere Woche (Richtwert
     `deload.as_needed`, übliche Praxis alle 5–6 Wochen). Das ist ausdrücklich optional.
-- **Inhalt:** etwa die Hälfte der Sätze, gleiche Übungen, RIR 3–4.
+- **Inhalt:** etwa die Hälfte der Sätze, gleiche Übungen, RIR 3–4, keine Intensitätstechniken. Gewichte bleiben.
+- **Ablauf:** Angenommen gilt die Deload-Woche 7 Tage. Der Tracker zeigt die reduzierte Vorgabe, Einheiten werden als
+  `is_deload` gespeichert, es gibt **keine Laständerung**, und die Einheiten zählen nicht für Stagnation/Rückgang.
+  Am Mesozyklus-Ende angenommen, beginnt der nächste Mesozyklus erst nach der Deload-Woche.
 
 ## Wie „Leistung“ gemessen wird
 
@@ -94,3 +107,13 @@ Als Steuerungssignal ist der Pump nicht belegt.
 Alle mit geprüfter DOI in [`src/data/science/sources.ts`](../src/data/science/sources.ts): Plotkin et al. 2022,
 Helms et al. 2018, Graham & Cleather 2021, Schoenfeld et al. 2017, Pelland et al. 2026, Scarpelli et al. 2022,
 Kassiano et al. 2022, Baz-Valle et al. 2019, Coleman et al. 2024, Rogerson et al. 2024.
+
+## Ablauf im Mesozyklus
+
+1. **Woche 1–5:** gleiches Volumen; nach jedem Training doppelte Progression (automatisch) und Prüfung auf
+   Gelenkbeschwerden bzw. akute Ermüdung (→ Vorschlag im Dashboard: Annehmen/Ablehnen).
+2. **Nach 5 Wochen** erscheint im Dashboard die Auswertung: Leistungstrend je Muskel, automatische
+   Volumenänderungen innerhalb des Zielbereichs und die Vorschläge (Deload, Übungswechsel, Volumen über Maximum) zum
+   Anhaken. „Neuen Mesozyklus starten“ wendet alles an; Nicht-Angehaktes wird als abgelehnt protokolliert.
+3. Jede Änderung steht im Protokoll (`plan_adaptations`) und lässt sich rückgängig machen.
+

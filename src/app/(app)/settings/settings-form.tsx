@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { buttonStyles, Card } from "@/components/ui";
+import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { getDb } from "@/lib/offline/db";
 import { clearHistory } from "@/lib/offline/history";
@@ -17,39 +17,6 @@ import { workoutStore } from "@/stores/workout";
 async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: EffortScale }) {
   const userId = await getCurrentUserId();
   if (userId) writeToOutbox({ table: "profiles", op: "upsert", rowId: userId, payload: { id: userId, ...patch } });
-}
-
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <fieldset>
-      <legend className="mb-2 text-sm font-medium">{label}</legend>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={value === option.value}
-            onClick={() => onChange(option.value)}
-            className={`min-h-11 rounded-lg text-sm font-semibold transition-colors ${
-              value === option.value ? "bg-accent text-accent-fg shadow-sm" : "text-muted hover:text-fg"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  );
 }
 
 export function SettingsForm() {

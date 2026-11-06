@@ -90,8 +90,7 @@ Beenden ─────► lokale Historie (IndexedDB) ──► „Letztes Mal�
 
 - **Kein Abgleich vom Server zum Gerät:** Auf einem neuen Gerät fehlen Plan und Historie lokal. Die Daten liegen in
   Supabase, werden aber noch nicht zurückgeladen.
-- **Mesozyklus-Ende noch nicht in der Oberfläche:** Die Logik für Volumenanpassung, Deload- und Wechselvorschläge
-  ist fertig und getestet (`reviewVolume`, `checkDeload`, `swapTrigger`), wird aber noch nicht ausgelöst.
+- ~~Mesozyklus-Ende noch nicht in der Oberfläche~~ – erledigt in [Schritt 5](05-fortschritt-und-mesozyklus.md).
 - **Pausen-Timer ohne Push-Benachrichtigung:** Er vibriert nur bei geöffneter App.
 - **Erklärtexte nur in kg:** Begründungen zu Anpassungen nennen Gewichte in kg, auch wenn lb gewählt ist.
 - **Keine Supersätze.**

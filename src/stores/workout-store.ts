@@ -35,6 +35,10 @@ export interface ActiveSession {
   userId: string | null;
   planId: string | null;
   planDayId: string | null;
+  /** Woche im Mesozyklus beim Start */
+  planWeek?: number | null;
+  /** Training in einer Deload-Woche */
+  deload?: boolean;
   startedAt: string;
   exercises: LoggedExercise[];
 }
@@ -50,7 +54,13 @@ export interface SetInput {
 
 export interface WorkoutState {
   session: ActiveSession | null;
-  start(options: { userId: string | null; planId?: string | null; planDayId?: string | null }): string;
+  start(options: {
+    userId: string | null;
+    planId?: string | null;
+    planDayId?: string | null;
+    planWeek?: number | null;
+    deload?: boolean;
+  }): string;
   addExercise(exerciseId: string, planExerciseId?: string | null): string;
   /** Liefert den Log der Übung – legt ihn beim ersten Satz an (Planübungen ohne Satz erzeugen keine leeren Einträge). */
   ensureExercise(exerciseId: string, planExerciseId?: string | null): string;
@@ -81,6 +91,8 @@ function sessionRow(s: ActiveSession, status: SessionStatus, endedAt: string | n
     user_id: s.userId,
     plan_id: s.planId,
     plan_day_id: s.planDayId,
+    plan_week: s.planWeek ?? null,
+    is_deload: s.deload ?? false,
     status,
     started_at: s.startedAt,
     ended_at: endedAt,
@@ -178,13 +190,15 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
         return {
           session: null,
 
-          start({ userId, planId = null, planDayId = null }) {
+          start({ userId, planId = null, planDayId = null, planWeek = null, deload = false }) {
             if (get().session) throw new Error("Es läuft bereits ein Training");
             const session: ActiveSession = {
               id: uuid(),
               userId,
               planId,
               planDayId,
+              planWeek,
+              deload,
               startedAt: now().toISOString(),
               exercises: [],
             };
@@ -329,6 +343,7 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               startedAt: session.startedAt,
               endedAt,
               sessionRpe,
+              ...(session.deload ? { deload: true } : {}),
               exerciseIds: [...new Set(exercises.map((e) => e.exerciseId))],
               exercises: exercises.map((e) => ({
                 logId: e.id,

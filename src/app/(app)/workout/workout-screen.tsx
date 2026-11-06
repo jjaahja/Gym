@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Sheet } from "@/components/sheet";
 import { buttonStyles, ButtonLink, Card } from "@/components/ui";
 import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable } from "@/lib/catalog";
@@ -10,22 +10,17 @@ import { useSyncStatus } from "@/lib/offline/sync";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { muscleVolume } from "@/lib/training/volume";
 import { completeWorkout } from "@/lib/workout/complete";
+import { startOptions } from "@/lib/workout/start";
 import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
+import { deloadPrescription } from "@/stores/plan-store";
 import type { StoredPlan } from "@/stores/plan-store";
 import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
 import type { ActiveSession } from "@/stores/workout-store";
+import { useNow } from "@/lib/use-now";
 import { ExerciseCard } from "./exercise-card";
 import { RestTimer } from "./rest-timer";
 import { useCompletion, useRestTimer } from "./ui-state";
 
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
 
 function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -57,7 +52,7 @@ function StartWorkout() {
   async function start(dayId: string | null) {
     setStarting(true);
     try {
-      workoutStore.getState().start({ userId: await getCurrentUserId(), planId: dayId ? plan!.id : null, planDayId: dayId });
+      workoutStore.getState().start({ userId: await getCurrentUserId(), ...startOptions(plan, dayId) });
     } finally {
       setStarting(false);
     }
@@ -128,14 +123,15 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
     const planned = (day?.exercises ?? []).map((pe) => ({
       key: pe.id,
       exercise: getExerciseById(pe.exerciseId)!,
-      planned: pe,
+      // Deload-Woche: halbe Sätze, RIR 3–4, keine Intensitätstechnik
+      planned: session.deload ? deloadPrescription(pe) : pe,
       log: session.exercises.find((e) => e.planExerciseId === pe.id) ?? null,
     }));
     const extra = session.exercises
       .filter((e) => !e.planExerciseId || !day?.exercises.some((pe) => pe.id === e.planExerciseId))
       .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, planned: null, log: e }));
     return [...planned, ...extra].filter((i) => i.exercise);
-  }, [day, session.exercises]);
+  }, [day, session.exercises, session.deload]);
 
   const firstOpen = items.findIndex((i) => (i.log?.sets.filter((s) => s.setType === "working").length ?? 0) < (i.planned?.sets ?? 3));
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -157,6 +153,16 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           Beenden
         </button>
       </div>
+
+      {session.deload && (
+        <Card className="border-accent bg-accent-soft">
+          <p className="text-sm font-semibold">Deload-Woche</p>
+          <p className="mt-0.5 text-sm text-muted">
+            Etwa halbe Sätze, 3–4 Wiederholungen im Tank, gleiche Übungen. Gewichte bleiben – so baust du Ermüdung ab,
+            ohne Kraft zu verlieren. Diese Woche wird nichts gesteigert.
+          </p>
+        </Card>
+      )}
 
       {items.length === 0 && (
         <Card>
@@ -346,10 +352,23 @@ function CompletionSummary() {
               <li key={a.id}>{a.explanation}</li>
             ))}
           </ul>
+        ) : result.session.deload ? (
+          <p className="mt-1 text-sm text-muted">Deload-Woche – Gewichte bleiben gleich, nach der Woche geht es normal weiter.</p>
         ) : (
           <p className="mt-1 text-sm text-muted">Gewichte bleiben gleich – steigere zuerst die Wiederholungen bis zum oberen Ende des Bereichs.</p>
         )}
       </Card>
+      {result.suggestions.length > 0 && (
+        <Card className="border-accent">
+          <h2 className="font-semibold">{result.suggestions.length === 1 ? "Ein Vorschlag" : `${result.suggestions.length} Vorschläge`} für deinen Plan</h2>
+          <ul className="mt-2 space-y-2 text-sm">
+            {result.suggestions.map((a) => (
+              <li key={a.id}>{a.explanation}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-muted">Annehmen oder ablehnen kannst du im Plan.</p>
+        </Card>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/dashboard" className={buttonStyles.primary} onClick={() => useCompletion.getState().setResult(null)}>
           Zum Plan

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { buttonStyles, ButtonLink, Card, PageHeader } from "@/components/ui";
 import { VolumeBar } from "@/components/volume-bar";
 import { getExerciseById, getMuscle } from "@/lib/catalog";
@@ -13,11 +13,14 @@ import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { muscleVolume, startOfWeek } from "@/lib/training/volume";
 import { formatWeight } from "@/lib/units";
-import { mesocyclePosition, type AdaptationRecord, type StoredPlan, type StoredPlanDay } from "@/stores/plan-store";
-import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
+import { useNow } from "@/lib/use-now";
+import { startOptions } from "@/lib/workout/start";
+import { deloadPrescription, mesocyclePosition, type StoredPlan, type StoredPlanDay } from "@/stores/plan-store";
+import { usePlan, usePlanHydrated } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
 import { useWorkout, workoutStore } from "@/stores/workout";
 import { ActiveWorkoutCard } from "./active-workout-card";
+import { AdaptationLog, MesocycleReviewCard, OpenSuggestions } from "./plan-review";
 
 const shortName = (name: string) => name.replace(/ \(.*\)$/, "");
 
@@ -61,7 +64,7 @@ function useStartDay() {
     }
     setStarting(true);
     try {
-      workoutStore.getState().start({ userId: await getCurrentUserId(), planId: plan.id, planDayId: day.id });
+      workoutStore.getState().start({ userId: await getCurrentUserId(), ...startOptions(plan, day.id) });
       router.push("/workout");
     } finally {
       setStarting(false);
@@ -71,18 +74,36 @@ function useStartDay() {
 }
 
 function PlanDashboard({ plan }: { plan: StoredPlan }) {
-  const [now] = useState(() => new Date());
+  const nowMs = useNow(60_000);
+  const now = useMemo(() => new Date(nowMs), [nowMs]);
   const position = mesocyclePosition(plan, now);
   const next = plan.days[plan.nextDayIndex] ?? plan.days[0];
+  const subtitle = position.deload
+    ? `${plan.name} · Deload-Woche`
+    : position.due
+      ? `${plan.name} · Mesozyklus ${position.mesocycle} abgeschlossen`
+      : `${plan.name} · Mesozyklus ${position.mesocycle}, Woche ${position.week} von ${plan.mesocycleWeeks}`;
+  const deloadEnd = plan.deloadWeekStart ? new Date(Date.parse(plan.deloadWeekStart) + 7 * 24 * 3600 * 1000) : null;
 
   return (
     <>
-      <PageHeader title="Dein Plan" subtitle={`${plan.name} · Woche ${position.week} von ${plan.mesocycleWeeks}`} />
+      <PageHeader title="Dein Plan" subtitle={subtitle} />
       <div className="space-y-4">
         <ActiveWorkoutCard />
-        <NextWorkout plan={plan} day={next} />
+        {position.due && <MesocycleReviewCard plan={plan} now={now} />}
+        {position.deload && deloadEnd && (
+          <Card className="border-accent bg-accent-soft">
+            <p className="font-semibold">Deload-Woche bis {deloadEnd.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })}</p>
+            <p className="mt-0.5 text-sm text-muted">
+              Gleiche Übungen und Gewichte, etwa halbe Sätze, 3–4 Wiederholungen im Tank. Ermüdung baut sich ab, Kraft und
+              Muskeln bleiben – danach startet der nächste Mesozyklus.
+            </p>
+          </Card>
+        )}
+        <OpenSuggestions plan={plan} />
+        <NextWorkout plan={plan} day={next} deload={position.deload} />
         <WeekVolume plan={plan} />
-        <Adaptations plan={plan} />
+        <AdaptationLog plan={plan} />
         <AllDays plan={plan} />
         {plan.warnings.length > 0 && (
           <Card>
@@ -102,20 +123,20 @@ function PlanDashboard({ plan }: { plan: StoredPlan }) {
   );
 }
 
-function NextWorkout({ plan, day }: { plan: StoredPlan; day: StoredPlanDay }) {
+function NextWorkout({ plan, day, deload }: { plan: StoredPlan; day: StoredPlanDay; deload: boolean }) {
   const running = useWorkout((s) => s.session);
   const unit = useSettings((s) => s.unitSystem);
   const { start, starting } = useStartDay();
   if (running) return null;
   return (
     <Card className="border-accent">
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Nächstes Training</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Nächstes Training{deload && " · Deload"}</p>
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <h2 className="text-xl font-bold">{day.name}</h2>
         <span className="text-sm text-muted">ca. {day.estimatedMinutes} min</span>
       </div>
       <ul className="mt-3 space-y-1.5 text-sm">
-        {day.exercises.map((e) => (
+        {day.exercises.map((planned) => deload ? deloadPrescription(planned) : planned).map((e) => (
           <li key={e.id} className="flex justify-between gap-3">
             <span className="min-w-0 truncate">{getExerciseById(e.exerciseId)?.nameDe}</span>
             <span className="tabular shrink-0 text-muted">
@@ -156,41 +177,6 @@ function WeekVolume({ plan }: { plan: StoredPlan }) {
           />
         ))}
       </div>
-    </Card>
-  );
-}
-
-const STATUS_LABELS: Record<AdaptationRecord["status"], string> = {
-  auto_applied: "Automatisch angepasst",
-  suggested: "Vorschlag",
-  accepted: "Angenommen",
-  rejected: "Abgelehnt",
-  reverted: "Rückgängig gemacht",
-};
-
-function Adaptations({ plan }: { plan: StoredPlan }) {
-  const adaptations = usePlan((s) => s.adaptations);
-  if (adaptations.length === 0) return null;
-  return (
-    <Card>
-      <h2 className="text-lg font-semibold">Anpassungen</h2>
-      <ul className="mt-2 divide-y divide-border">
-        {adaptations.slice(0, 6).map((a) => {
-          const exercise = a.planExerciseId ? plan.days.flatMap((d) => d.exercises).find((e) => e.id === a.planExerciseId) : null;
-          return (
-            <li key={a.id} className="py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{STATUS_LABELS[a.status]}</p>
-              {exercise && <p className="font-semibold">{getExerciseById(exercise.exerciseId)?.nameDe}</p>}
-              <p className="text-sm text-muted">{a.explanation}</p>
-              {a.status === "auto_applied" && (
-                <button type="button" className="mt-1 min-h-10 text-sm font-medium text-accent" onClick={() => planStore.getState().revertAdaptation(a.id)}>
-                  Rückgängig
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 import type { EquipmentSlug } from "@/data/catalog/equipment";
 import { TRACKED_MUSCLES, type MuscleSlug, type TrackedMuscle } from "@/data/catalog/muscles";
-import { exercises as catalog, getMuscle, isExerciseAvailable, primaryMuscles, type Exercise } from "@/lib/catalog";
+import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable, primaryMuscles, type Exercise } from "@/lib/catalog";
 import type {
   ExperienceLevel,
   MovementPattern,
@@ -351,12 +351,57 @@ function restSecondsFor(e: Exercise, goal: TrainingGoal, experience: ExperienceL
   return rest.min ?? rest.max ?? 90;
 }
 
-function minutesPerSet(item: WorkingExercise): number {
+/** Intensitätstechnik nur bei Isolationsübungen (ohne Rumpf), wenn der Richtwert sie zulässt. */
+export function allowsTechnique(e: Exercise, goal: TrainingGoal, experience: ExperienceLevel): boolean {
+  return (
+    goal === "hypertrophy" &&
+    e.mechanic === "isolation" &&
+    !CORE_PATTERNS.includes(e.movementPattern) &&
+    (resolveExerciseGuidelines(e, goal, experience).intensity_technique?.max ?? 0) >= 1
+  );
+}
+
+/** Maschine/Kabel → Dropsatz, Dehnungsfokus → Teilwiederholungen in Dehnung, sonst Myo-Reps. */
+export function techniqueFor(e: Exercise): SetType {
+  return e.equipment.some((eq) => MACHINE_EQUIPMENT.includes(eq))
+    ? "dropset"
+    : e.resistanceProfile === "lengthened"
+      ? "lengthened_partials"
+      : "myo_reps";
+}
+
+/** Vorgabe (Wdh., RIR, Pause) aus den Richtwerten – auch für Übungswechsel im laufenden Plan. */
+export function prescribe(
+  e: Exercise,
+  goal: TrainingGoal,
+  experience: ExperienceLevel,
+  slot: { orderIndex: number; sets: number; technique: SetType | null },
+): PlannedExercise {
+  const r = resolveExerciseGuidelines(e, goal, experience);
+  return {
+    exerciseId: e.id,
+    exerciseSlug: e.slug,
+    orderIndex: slot.orderIndex,
+    sets: slot.sets,
+    repsMin: r.rep_range!.min!,
+    repsMax: r.rep_range!.max!,
+    rirMin: r.proximity_to_failure!.min!,
+    rirMax: r.proximity_to_failure!.max!,
+    restSeconds: restSecondsFor(e, goal, experience),
+    lastSetTechnique: slot.technique,
+    progressionScheme: "double_progression",
+    guidelineKeys: [r.rep_range!, r.proximity_to_failure!, r.rest_interval!, r.intensity_technique!].map((g) => g.key),
+  };
+}
+
+type TimedItem = Pick<WorkingExercise, "exercise" | "sets" | "technique" | "restSeconds">;
+
+function minutesPerSet(item: Pick<TimedItem, "exercise" | "restSeconds">): number {
   const sides = item.exercise.laterality === "unilateral" ? 2 : 1;
   return (WORK_SECONDS_PER_SET * sides + item.restSeconds) / 60;
 }
 
-function dayMinutes(day: WorkingDay): number {
+function dayMinutes(day: { items: readonly TimedItem[] }): number {
   const active = day.items.filter((i) => i.sets > 0);
   return (
     WARMUP_MIN +
@@ -369,6 +414,15 @@ function dayMinutes(day: WorkingDay): number {
       0,
     )
   );
+}
+
+/** Geschätzte Dauer eines geplanten Tages (gleiche Annahmen wie bei der Generierung). */
+export function estimateDayMinutes(exercises: readonly PlannedExercise[]): number {
+  const items = exercises.flatMap((p) => {
+    const exercise = getExerciseById(p.exerciseId);
+    return exercise ? [{ exercise, sets: p.sets, technique: p.lastSetTechnique, restSeconds: p.restSeconds }] : [];
+  });
+  return Math.round(dayMinutes({ items }));
 }
 
 function setCredit(item: WorkingExercise): number {
@@ -531,8 +585,7 @@ export function generatePlan(input: PlanInput): GeneratedPlan {
   if (goal === "hypertrophy") {
     for (const day of workingDays) {
       const candidates = day.items
-        .filter((i) => i.sets > 0 && i.exercise.mechanic === "isolation" && !CORE_PATTERNS.includes(i.exercise.movementPattern))
-        .filter((i) => (resolveExerciseGuidelines(i.exercise, goal, experience).intensity_technique?.max ?? 0) >= 1)
+        .filter((i) => i.sets > 0 && allowsTechnique(i.exercise, goal, experience))
         .sort((a, b) => {
           const pa = primaryMuscles(a.exercise).some((m) => priority.has(m)) ? 1 : 0;
           const pb = primaryMuscles(b.exercise).some((m) => priority.has(m)) ? 1 : 0;
@@ -545,11 +598,7 @@ export function generatePlan(input: PlanInput): GeneratedPlan {
         if (!staysBelowMax(volume, item, TECHNIQUE_SET_CREDIT)) continue;
         if (!fitsSessionCaps(day, item, TECHNIQUE_SET_CREDIT)) continue;
         if (dayMinutes(day) + TECHNIQUE_EXTRA_MIN > budget) continue;
-        item.technique = item.exercise.equipment.some((e) => MACHINE_EQUIPMENT.includes(e))
-          ? "dropset"
-          : item.exercise.resistanceProfile === "lengthened"
-            ? "lengthened_partials"
-            : "myo_reps";
+        item.technique = techniqueFor(item.exercise);
         applied++;
       }
     }
@@ -572,23 +621,9 @@ export function generatePlan(input: PlanInput): GeneratedPlan {
       type: day.type,
       name: repeats ? `${DAY_LABELS[day.type]} ${String.fromCharCode(65 + sameTypeBefore)}` : DAY_LABELS[day.type],
       estimatedMinutes: Math.round(dayMinutes(day)),
-      exercises: active.map((item, orderIndex) => {
-        const r = resolveExerciseGuidelines(item.exercise, goal, experience);
-        return {
-          exerciseId: item.exercise.id,
-          exerciseSlug: item.exercise.slug,
-          orderIndex,
-          sets: item.sets,
-          repsMin: r.rep_range!.min!,
-          repsMax: r.rep_range!.max!,
-          rirMin: r.proximity_to_failure!.min!,
-          rirMax: r.proximity_to_failure!.max!,
-          restSeconds: item.restSeconds,
-          lastSetTechnique: item.technique,
-          progressionScheme: "double_progression",
-          guidelineKeys: [r.rep_range!, r.proximity_to_failure!, r.rest_interval!, r.intensity_technique!].map((g) => g.key),
-        };
-      }),
+      exercises: active.map((item, orderIndex) =>
+        prescribe(item.exercise, goal, experience, { orderIndex, sets: item.sets, technique: item.technique }),
+      ),
     };
   });
 

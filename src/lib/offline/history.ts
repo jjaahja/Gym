@@ -53,6 +53,10 @@ export async function sessionsSince(db: GymDB, isoDate: string): Promise<Complet
   return db.sessions.where("endedAt").aboveOrEqual(isoDate).sortBy("endedAt");
 }
 
+export async function allSessions(db: GymDB): Promise<CompletedSession[]> {
+  return db.sessions.orderBy("endedAt").toArray();
+}
+
 export async function clearHistory(db: GymDB): Promise<void> {
   await db.sessions.clear();
 }

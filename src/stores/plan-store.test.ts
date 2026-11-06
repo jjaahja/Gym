@@ -6,9 +6,11 @@ import { getExercise } from "@/lib/catalog";
 import { catalogId } from "@/lib/db/stable-id";
 import { GymDB } from "@/lib/offline/db";
 import type { NewOutboxEntry } from "@/lib/offline/outbox";
+import { planVolume } from "@/lib/training/mesocycle";
 import { generatePlan } from "@/lib/training/plan-generator";
+import { reviewVolume, type AdaptationProposal } from "@/lib/training/progression";
 import { completeWorkout } from "@/lib/workout/complete";
-import { createPlanStore, mesocyclePosition, type AssessmentInput } from "./plan-store";
+import { createPlanStore, deloadPrescription, mesocyclePosition, type AssessmentInput, type StoredPlan } from "./plan-store";
 import { createWorkoutStore } from "./workout-store";
 
 const memory = (): StateStorage => {
@@ -94,11 +96,17 @@ describe("Plan-Store", () => {
     expect(plans.getState().plan?.nextDayIndex).toBe(0);
   });
 
-  it("berechnet Woche und Mesozyklus", () => {
-    const plan = { startedAt: "2026-11-02T08:00:00Z", mesocycleWeeks: 5 };
-    expect(mesocyclePosition(plan, new Date("2026-11-02T09:00:00Z"))).toEqual({ week: 1, mesocycle: 1 });
-    expect(mesocyclePosition(plan, new Date("2026-11-16T09:00:00Z"))).toEqual({ week: 3, mesocycle: 1 });
-    expect(mesocyclePosition(plan, new Date("2026-12-07T09:00:00Z"))).toEqual({ week: 1, mesocycle: 2 });
+  it("berechnet Woche, Mesozyklus, Fälligkeit der Auswertung und Deload-Woche", () => {
+    const plan = { cycleStartedAt: "2026-11-02T08:00:00Z", mesocycleWeeks: 5, completedMesocycles: 0, deloadWeekStart: null };
+    const at = (iso: string) => mesocyclePosition(plan, new Date(iso));
+    expect(at("2026-11-02T09:00:00Z")).toEqual({ week: 1, mesocycle: 1, due: false, deload: false });
+    expect(at("2026-11-16T09:00:00Z")).toEqual({ week: 3, mesocycle: 1, due: false, deload: false });
+    expect(at("2026-12-06T09:00:00Z")).toEqual({ week: 5, mesocycle: 1, due: false, deload: false });
+    // Nach 5 Wochen bleibt Woche 5 stehen, bis die Auswertung abgeschlossen ist
+    expect(at("2026-12-20T09:00:00Z")).toEqual({ week: 5, mesocycle: 1, due: true, deload: false });
+    const deloading = { ...plan, deloadWeekStart: "2026-12-07T10:00:00Z", cycleStartedAt: "2026-12-14T10:00:00Z", completedMesocycles: 1 };
+    expect(mesocyclePosition(deloading, new Date("2026-12-09T09:00:00Z"))).toEqual({ week: 1, mesocycle: 2, due: false, deload: true });
+    expect(mesocyclePosition(deloading, new Date("2026-12-15T09:00:00Z"))).toEqual({ week: 1, mesocycle: 2, due: false, deload: false });
   });
 });
 
@@ -140,5 +148,170 @@ describe("Trainingsabschluss mit Progression", () => {
     expect(pe().targetLoadKg).toBe(60);
     expect(ctx.plans.getState().adaptations[0].status).toBe("reverted");
     expect(ctx.entries.at(-1)?.payload).toMatchObject({ status: "reverted" });
+  });
+});
+
+describe("Mesozyklus-Abschluss und Vorschläge", () => {
+  const byId = (plan: StoredPlan, id: string) => plan.days.flatMap((d) => d.exercises).find((e) => e.id === id);
+  const chestSets = (plan: StoredPlan) => Math.round((planVolume(plan.days).get("chest") ?? 0) * 10) / 10;
+
+  function swapProposal(plan: StoredPlan): { planExerciseId: string; proposal: AdaptationProposal } {
+    const pe = plan.days.flatMap((d) => d.exercises).find((e) => e.exerciseSlug === "barbell-bench-press")!;
+    return {
+      planExerciseId: pe.id,
+      proposal: {
+        type: "swap_exercise",
+        reason: "stagnation",
+        status: "suggested",
+        before: { exercise_id: pe.exerciseId, exercise_slug: pe.exerciseSlug },
+        after: { exercise_id: getExercise("machine-chest-press")!.id, exercise_slug: "machine-chest-press" },
+        guidelineKey: "exercise_variation.planned",
+        explanation: "Test",
+      },
+    };
+  }
+
+  it("wendet Volumenänderungen an, aktualisiert Übersicht und Dauer und lässt sich rückgängig machen", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const before = chestSets(plan);
+    const proposal = reviewVolume({ muscle: "chest", currentSets: before, min: 10, max: 20, trend: "up", jointIssues: false, fatigue: false })!;
+    ctx.entries.length = 0;
+    ctx.tick(36 * 24 * 3600_000);
+
+    const [record] = ctx.plans.getState().completeMesocycle({ volume: [proposal], accepted: [], rejected: [] });
+    const after = ctx.plans.getState().plan!;
+    expect(record).toMatchObject({ type: "add_set", status: "auto_applied", muscle: "chest" });
+    expect(chestSets(after)).toBe(before + 2);
+    expect(after.volume.find((v) => v.muscle === "chest")!.plannedSets).toBe(before + 2);
+    expect(after.completedMesocycles).toBe(1);
+    expect(after.cycleStartedAt).toBe(new Date(Date.parse(plan.createdAt) + 36 * 24 * 3600_000).toISOString());
+    expect(mesocyclePosition(after, new Date(Date.parse(after.cycleStartedAt) + 1000))).toMatchObject({ week: 1, mesocycle: 2, due: false });
+    const changedDays = after.days.filter((d, i) => d.estimatedMinutes !== plan.days[i].estimatedMinutes);
+    expect(changedDays.length).toBeGreaterThan(0);
+    expect(ctx.entries.filter((e) => e.table === "plan_exercises")).toHaveLength(2);
+    expect(ctx.entries.at(-1)).toMatchObject({ table: "training_plans", payload: { status: "active" } });
+    expect((record.after as { sets: Record<string, number> }).sets).toBeDefined();
+
+    ctx.plans.getState().revertAdaptation(record.id);
+    expect(chestSets(ctx.plans.getState().plan!)).toBe(before);
+    expect(ctx.plans.getState().adaptations.find((a) => a.id === record.id)?.status).toBe("reverted");
+  });
+
+  it("ersetzt bei angenommenem Wechsel die Übung samt Vorgabe – rückgängig stellt das Original wieder her", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const swap = swapProposal(plan);
+    ctx.plans.getState().setTargetLoad(swap.planExerciseId, 80);
+    const original = byId(ctx.plans.getState().plan!, swap.planExerciseId)!;
+
+    const suggestion = ctx.plans.getState().addSuggestion(swap)!;
+    expect(suggestion).toMatchObject({ status: "suggested", resolvedAt: null });
+    expect(ctx.plans.getState().addSuggestion(swap)).toBeNull(); // kein Duplikat
+
+    ctx.plans.getState().acceptSuggestion(suggestion.id);
+    const replaced = byId(ctx.plans.getState().plan!, swap.planExerciseId)!;
+    expect(replaced).toMatchObject({ exerciseSlug: "machine-chest-press", targetLoadKg: null, sets: original.sets, orderIndex: original.orderIndex });
+    expect(ctx.entries.findLast((e) => e.table === "plan_exercises")?.payload).toMatchObject({
+      id: swap.planExerciseId,
+      exercise_id: getExercise("machine-chest-press")!.id,
+    });
+    const accepted = ctx.plans.getState().adaptations.find((a) => a.id === suggestion.id)!;
+    expect(accepted.status).toBe("accepted");
+
+    ctx.plans.getState().revertAdaptation(suggestion.id);
+    expect(byId(ctx.plans.getState().plan!, swap.planExerciseId)).toEqual(original);
+  });
+
+  it("startet eine angenommene Deload-Woche; am Mesozyklus-Ende beginnt der neue Zyklus danach", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: null, assessment, generated: ctx.generated });
+    ctx.tick(35 * 24 * 3600_000);
+    const deload: AdaptationProposal = {
+      type: "deload",
+      reason: "mesocycle_end",
+      status: "suggested",
+      before: { exercises: [] },
+      after: { exercises: [] },
+      guidelineKey: "deload.as_needed",
+      explanation: "Test",
+    };
+    const swap = swapProposal(plan);
+    const records = ctx.plans.getState().completeMesocycle({
+      volume: [],
+      accepted: [{ proposal: deload, planExerciseId: null }],
+      rejected: [swap],
+    });
+    expect(records.map((r) => `${r.type}:${r.status}`)).toEqual(["swap_exercise:rejected", "deload:accepted"]);
+    expect(ctx.plans.getState().adaptations[0].type).toBe("deload"); // Änderungen oben im Protokoll
+    const after = ctx.plans.getState().plan!;
+    const now = Date.parse(plan.createdAt) + 35 * 24 * 3600_000;
+    expect(after.deloadWeekStart).toBe(new Date(now).toISOString());
+    expect(after.cycleStartedAt).toBe(new Date(now + 7 * 24 * 3600_000).toISOString());
+    expect(mesocyclePosition(after, new Date(now + 2 * 24 * 3600_000))).toMatchObject({ deload: true, due: false, mesocycle: 2 });
+    // Abgelehnter Wechsel ändert nichts am Plan
+    expect(byId(after, swap.planExerciseId)!.exerciseSlug).toBe("barbell-bench-press");
+
+    ctx.plans.getState().revertAdaptation(records[1].id);
+    expect(ctx.plans.getState().plan).toMatchObject({ deloadWeekStart: null, lastDeloadAt: null, cycleStartedAt: new Date(now).toISOString() });
+  });
+
+  it("Deload-Vorgabe: halbe Sätze (aufgerundet), RIR 3–4, keine Intensitätstechnik", () => {
+    expect(deloadPrescription({ sets: 3, rirMin: 0, rirMax: 2, lastSetTechnique: "myo_reps" as const })).toEqual({
+      sets: 2,
+      rirMin: 3,
+      rirMax: 4,
+      lastSetTechnique: null,
+    });
+    expect(deloadPrescription({ sets: 1, rirMin: 1, rirMax: 2, lastSetTechnique: null }).sets).toBe(1);
+  });
+
+  it("lehnt Vorschläge ab und schließt nicht mehr anwendbare als abgelehnt", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: null, assessment, generated: ctx.generated });
+    const swap = swapProposal(plan);
+    const a = ctx.plans.getState().addSuggestion(swap)!;
+    ctx.plans.getState().rejectSuggestion(a.id);
+    expect(ctx.plans.getState().adaptations.find((r) => r.id === a.id)).toMatchObject({ status: "rejected" });
+    expect(ctx.plans.getState().adaptations.find((r) => r.id === a.id)?.resolvedAt).not.toBeNull();
+
+    const stale = ctx.plans.getState().addSuggestion({ ...swap, planExerciseId: "gibt-es-nicht" })!;
+    ctx.plans.getState().acceptSuggestion(stale.id);
+    expect(ctx.plans.getState().adaptations.find((r) => r.id === stale.id)?.status).toBe("rejected");
+  });
+
+  it("migriert gespeicherte Pläne von Version 1", async () => {
+    const storage = memory();
+    const v1Plan = { ...setup().generated, id: "p1", startedAt: "2026-10-01T08:00:00.000Z", days: [], volume: [] };
+    storage.setItem("gym-active-plan", JSON.stringify({ state: { plan: v1Plan, adaptations: [] }, version: 1 }));
+    const store = createPlanStore({ sink: () => {}, storage: () => storage });
+    await store.persist.rehydrate();
+    expect(store.getState().plan).toMatchObject({
+      cycleStartedAt: "2026-10-01T08:00:00.000Z",
+      completedMesocycles: 0,
+      deloadWeekStart: null,
+      lastDeloadAt: null,
+    });
+  });
+});
+
+describe("Training in der Deload-Woche", () => {
+  it("markiert die Einheit, ändert keine Last und synchronisiert is_deload/plan_week", async () => {
+    const ctx = setup();
+    const db = new GymDB(`d-${crypto.randomUUID()}`, { indexedDB: new IDBFactory(), IDBKeyRange });
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const pe = plan.days[0].exercises[0];
+    ctx.workout.getState().start({ userId: "user-1", planId: plan.id, planDayId: plan.days[0].id, planWeek: 5, deload: true });
+    const logId = ctx.workout.getState().ensureExercise(pe.exerciseId, pe.id);
+    for (let i = 0; i < 2; i++) ctx.workout.getState().logSet(logId, { weightKg: 60, reps: pe.repsMax + 2, rir: 4 });
+    ctx.tick(3600_000);
+    const result = await completeWorkout({ db, workout: ctx.workout, plans: ctx.plans, sessionRpe: 5 });
+
+    expect(result.session.deload).toBe(true);
+    expect(result.adaptations).toEqual([]);
+    expect(ctx.plans.getState().plan!.days[0].exercises[0].targetLoadKg).toBeNull();
+    const row = ctx.entries.find((e) => e.table === "workout_sessions" && e.payload.status === "completed")!.payload;
+    expect(row).toMatchObject({ is_deload: true, plan_week: 5 });
+    expect(ctx.plans.getState().plan!.nextDayIndex).toBe(1);
   });
 });

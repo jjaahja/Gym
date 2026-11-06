@@ -26,11 +26,11 @@ export function VolumeBar({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className={highlight ? "font-semibold" : ""}>
+        <span className={`min-w-0 ${highlight ? "font-semibold" : ""}`}>
           {label}
           {highlight && <span className="ml-1 text-accent" aria-label="Priorität">★</span>}
         </span>
-        <span className="tabular text-muted">
+        <span className="tabular shrink-0 whitespace-nowrap text-muted">
           <span className="font-semibold text-fg">{de(value)}</span>
           {target !== undefined ? ` / ${de(target)}` : ""} · Ziel {min}–{max}
         </span>

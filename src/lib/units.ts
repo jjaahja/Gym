@@ -26,3 +26,18 @@ export function formatWeight(kg: number, unit: UnitSystem): string {
   const value = toDisplayWeight(kg, unit);
   return `${value.toLocaleString("de-DE")} ${weightUnitLabel(unit)}`;
 }
+
+// Längen (Körpermaße) werden in cm gespeichert; Zoll ist reine Anzeige.
+export const CM_PER_INCH = 2.54;
+
+export function lengthUnitLabel(unit: UnitSystem): "cm" | "in" {
+  return unit === "imperial" ? "in" : "cm";
+}
+
+export function toDisplayLength(cm: number, unit: UnitSystem): number {
+  return Math.round((unit === "imperial" ? cm / CM_PER_INCH : cm) * 10) / 10;
+}
+
+export function fromDisplayLength(value: number, unit: UnitSystem): number {
+  return Math.round((unit === "imperial" ? value * CM_PER_INCH : value) * 10) / 10;
+}

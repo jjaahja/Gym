@@ -1,7 +1,8 @@
 # Schritt 1 – Datenbank-Schema & Datenmodelle
 
 > Status: **Vorschlag zur Freigabe**
-> SQL: [`supabase/migrations/20261105000000_initial_schema.sql`](../supabase/migrations/20261105000000_initial_schema.sql)
+> SQL: [`supabase/migrations/20261105000000_initial_schema.sql`](../supabase/migrations/20261105000000_initial_schema.sql),
+> Ergänzung Schritt 5: [`20261106000000_deload_sessions.sql`](../supabase/migrations/20261106000000_deload_sessions.sql) (`workout_sessions.is_deload`)
 
 ## Vorgeschlagener Tech-Stack
 

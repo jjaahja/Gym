@@ -40,20 +40,42 @@ export function ButtonLink({
   );
 }
 
-/** Platzhalter für Bereiche, die in einem späteren Roadmap-Schritt gebaut werden. */
-export function ComingSoon({ step, title, items }: { step: number; title: string; items: string[] }) {
+/** Umschalter (Segmented Control); bei `label` als Fieldset mit Legende. */
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  columns = options.length,
+}: {
+  label?: string;
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+  columns?: number;
+}) {
+  const buttons = (
+    <div className="grid gap-1 rounded-xl bg-surface-2 p-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`min-h-11 rounded-lg px-1 text-sm font-semibold transition-colors ${
+            value === option.value ? "bg-accent text-accent-fg shadow-sm" : "text-muted hover:text-fg"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+  if (!label) return buttons;
   return (
-    <Card>
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Schritt {step}</p>
-      <h2 className="mt-1 text-lg font-semibold">{title}</h2>
-      <ul className="mt-3 space-y-2 text-sm text-muted">
-        {items.map((item) => (
-          <li key={item} className="flex gap-2">
-            <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium">{label}</legend>
+      {buttons}
+    </fieldset>
   );
 }

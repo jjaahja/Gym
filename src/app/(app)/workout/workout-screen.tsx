@@ -11,6 +11,7 @@ import { getCurrentUserId } from "@/lib/supabase/client";
 import { muscleVolume } from "@/lib/training/volume";
 import { completeWorkout } from "@/lib/workout/complete";
 import { startOptions } from "@/lib/workout/start";
+import { dayForWeekday, hasSchedule, isoWeekday, weekdayShort } from "@/lib/training/schedule";
 import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
 import { deloadPrescription } from "@/stores/plan-store";
 import type { StoredPlan } from "@/stores/plan-store";
@@ -66,7 +67,8 @@ function StartWorkout() {
           <h2 className="text-lg font-semibold">Welcher Tag?</h2>
           <div className="mt-3 space-y-2">
             {plan.days.map((day) => {
-              const next = day.dayIndex === plan.nextDayIndex;
+              const todays = hasSchedule(plan) ? dayForWeekday(plan, isoWeekday(new Date())) : null;
+              const next = todays ? day.id === todays.id : day.dayIndex === plan.nextDayIndex;
               return (
                 <button
                   key={day.id}
@@ -78,12 +80,15 @@ function StartWorkout() {
                   }`}
                 >
                   <span>
-                    <span className="block font-semibold">{day.name}</span>
+                    <span className="block font-semibold">
+                      {day.weekday && <span className="mr-2 text-xs font-bold text-accent">{weekdayShort(day.weekday)}</span>}
+                      {day.name}
+                    </span>
                     <span className="block text-sm text-muted">
                       {day.exercises.length} Übungen · ca. {day.estimatedMinutes} min
                     </span>
                   </span>
-                  {next && <span className="text-xs font-semibold text-accent">Als Nächstes</span>}
+                  {next && <span className="text-xs font-semibold text-accent">{todays ? "Heute" : "Als Nächstes"}</span>}
                 </button>
               );
             })}

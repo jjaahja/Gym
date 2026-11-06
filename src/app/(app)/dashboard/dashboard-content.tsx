@@ -1,27 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { CalendarIcon, ChevronRightIcon } from "@/components/icons";
 import { buttonStyles, ButtonLink, Card, PageHeader } from "@/components/ui";
 import { VolumeBar } from "@/components/volume-bar";
-import { getExerciseById, getMuscle } from "@/lib/catalog";
-import { SET_TYPE_LABELS } from "@/lib/labels";
+import { getMuscle } from "@/lib/catalog";
 import { getDb } from "@/lib/offline/db";
 import { sessionsSince } from "@/lib/offline/history";
 import { useSyncStatus } from "@/lib/offline/sync";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
-import { getCurrentUserId } from "@/lib/supabase/client";
+import { currentWeek, hasSchedule, localDay, missedThisWeek, mondayOf, nextScheduled } from "@/lib/training/schedule";
 import { muscleVolume, startOfWeek } from "@/lib/training/volume";
-import { formatWeight } from "@/lib/units";
 import { useNow } from "@/lib/use-now";
-import { startOptions } from "@/lib/workout/start";
-import { deloadPrescription, mesocyclePosition, type StoredPlan, type StoredPlanDay } from "@/stores/plan-store";
+import { mesocyclePosition, type StoredPlan } from "@/stores/plan-store";
 import { usePlan, usePlanHydrated } from "@/stores/plan";
-import { useSettings } from "@/stores/settings";
-import { useWorkout, workoutStore } from "@/stores/workout";
 import { ActiveWorkoutCard } from "./active-workout-card";
 import { AdaptationLog, MesocycleReviewCard, OpenSuggestions } from "./plan-review";
+import { CalendarLink, CycleProgress, DayHero, PlanDays, WeekdaySheet, WeekStrip } from "./week";
 
 const shortName = (name: string) => name.replace(/ \(.*\)$/, "");
 
@@ -66,116 +62,123 @@ function NoPlan() {
   );
 }
 
-function useStartDay() {
-  const router = useRouter();
-  const [starting, setStarting] = useState(false);
-  async function start(plan: StoredPlan, day: StoredPlanDay) {
-    if (workoutStore.getState().session) {
-      router.push("/workout");
-      return;
-    }
-    setStarting(true);
-    try {
-      workoutStore.getState().start({ userId: await getCurrentUserId(), ...startOptions(plan, day.id) });
-      router.push("/workout");
-    } finally {
-      setStarting(false);
-    }
-  }
-  return { start, starting };
-}
-
 function PlanDashboard({ plan }: { plan: StoredPlan }) {
   const nowMs = useNow(60_000);
   const now = useMemo(() => new Date(nowMs), [nowMs]);
   const position = mesocyclePosition(plan, now);
-  const next = plan.days[plan.nextDayIndex] ?? plan.days[0];
-  const subtitle = position.deload
-    ? `${plan.name} · Deload-Woche`
-    : position.due
-      ? `${plan.name} · Mesozyklus ${position.mesocycle} abgeschlossen`
-      : `${plan.name} · Mesozyklus ${position.mesocycle}, Woche ${position.week} von ${plan.mesocycleWeeks}`;
-  const deloadEnd = plan.deloadWeekStart ? new Date(Date.parse(plan.deloadWeekStart) + 7 * 24 * 3600 * 1000) : null;
+  const monday = mondayOf(now).toISOString();
+  const sessions = useLiveQuery(() => sessionsSince(getDb(), monday), [monday], []);
+  const scheduled = hasSchedule(plan);
+  const input = { plan, sessions, now };
+  const week = currentWeek(input);
+  const next = nextScheduled(input);
+  const missed = missedThisWeek(input);
+  const today = localDay(now);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [editWeekdays, setEditWeekdays] = useState(false);
+  // Standard: verpasstes Training dieser Woche (nachholen), sonst heute
+  const selectedDay = week.find((d) => d.date === (selected ?? (missed && !week.find((w) => w.today)?.planned ? missed.date : today))) ?? week[0];
+  const hour = now.getHours();
+  const greeting = hour < 11 ? "Guten Morgen" : hour < 18 ? "Hallo" : "Guten Abend";
 
   return (
     <>
-      <PageHeader title="Dein Plan" subtitle={subtitle} />
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted">{greeting}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{plan.name.replace(/ · .*$/, "")}</h1>
+        </div>
+        <Link
+          href="/calendar"
+          aria-label="Kalender öffnen"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-accent"
+        >
+          <CalendarIcon className="size-5" />
+        </Link>
+      </header>
       <div className="space-y-4">
         <ActiveWorkoutCard />
         {position.due && <MesocycleReviewCard plan={plan} now={now} />}
-        {position.deload && deloadEnd && (
-          <Card className="border-accent bg-accent-soft">
-            <p className="font-semibold">Deload-Woche bis {deloadEnd.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })}</p>
-            <p className="mt-0.5 text-sm text-muted">
-              Gleiche Übungen und Gewichte, etwa halbe Sätze, 3–4 Wiederholungen im Tank. Ermüdung baut sich ab, Kraft und
-              Muskeln bleiben – danach startet der nächste Mesozyklus.
-            </p>
-          </Card>
-        )}
         <OpenSuggestions plan={plan} />
-        <NextWorkout plan={plan} day={next} deload={position.deload} />
-        <WeekVolume plan={plan} />
+        {scheduled ? (
+          <>
+            <WeekStrip week={week} selected={selectedDay.date} onSelect={setSelected} />
+            <DayHero plan={plan} day={selectedDay} next={next} deload={position.deload} />
+          </>
+        ) : (
+          <>
+            <Card className="border-accent bg-accent-soft">
+              <h2 className="font-semibold">Lege deine Trainingstage fest</h2>
+              <p className="mt-1 text-sm text-muted">
+                Mit festen Wochentagen siehst du deine Woche auf einen Blick, im Kalender und als Erinnerung im Handy-Kalender.
+              </p>
+              <button type="button" className={`${buttonStyles.primary} mt-3 w-full`} onClick={() => setEditWeekdays(true)}>
+                Wochentage wählen
+              </button>
+            </Card>
+            <DayHero
+              plan={plan}
+              day={{
+                ...week.find((d) => d.today)!,
+                status: "planned",
+                planned: plan.days[plan.nextDayIndex] ?? plan.days[0],
+              }}
+              next={null}
+              deload={position.deload}
+            />
+          </>
+        )}
+        <CycleProgress plan={plan} week={position.week} deload={position.deload} />
+        <PlanDays plan={plan} onEditWeekdays={() => setEditWeekdays(true)} />
+        <WeekVolume
+          plan={plan}
+          trainings={week.filter((d) => d.status === "done").length}
+          planned={week.filter((d) => d.planned || d.status === "done").length}
+        />
+        <CalendarLink />
         <AdaptationLog plan={plan} />
-        <AllDays plan={plan} />
         {plan.warnings.length > 0 && (
-          <Card>
-            <h2 className="font-semibold">Hinweise zum Plan</h2>
+          <details className="rounded-2xl border border-border bg-surface p-4">
+            <summary className="cursor-pointer font-semibold">Hinweise zum Plan ({plan.warnings.length})</summary>
             <ul className="mt-2 space-y-2 text-sm text-muted">
               {plan.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
-          </Card>
+          </details>
         )}
         <ButtonLink href="/onboarding" variant="secondary">
           Plan neu erstellen
         </ButtonLink>
       </div>
+      {editWeekdays && <WeekdaySheet plan={plan} open={editWeekdays} onClose={() => setEditWeekdays(false)} />}
     </>
   );
 }
 
-function NextWorkout({ plan, day, deload }: { plan: StoredPlan; day: StoredPlanDay; deload: boolean }) {
-  const running = useWorkout((s) => s.session);
-  const unit = useSettings((s) => s.unitSystem);
-  const { start, starting } = useStartDay();
-  if (running) return null;
-  return (
-    <Card className="border-accent">
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Nächstes Training{deload && " · Deload"}</p>
-      <div className="mt-1 flex items-baseline justify-between gap-3">
-        <h2 className="text-xl font-bold">{day.name}</h2>
-        <span className="text-sm text-muted">ca. {day.estimatedMinutes} min</span>
-      </div>
-      <ul className="mt-3 space-y-1.5 text-sm">
-        {day.exercises.map((planned) => deload ? deloadPrescription(planned) : planned).map((e) => (
-          <li key={e.id} className="flex justify-between gap-3">
-            <span className="min-w-0 truncate">{getExerciseById(e.exerciseId)?.nameDe}</span>
-            <span className="tabular shrink-0 text-muted">
-              {e.sets} × {e.repsMin}–{e.repsMax}
-              {e.targetLoadKg != null && ` · ${formatWeight(e.targetLoadKg, unit)}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <button type="button" className={`${buttonStyles.primary} mt-4 w-full`} disabled={starting} onClick={() => start(plan, day)}>
-        Training starten
-      </button>
-    </Card>
-  );
-}
-
-function WeekVolume({ plan }: { plan: StoredPlan }) {
+function WeekVolume({ plan, trainings, planned }: { plan: StoredPlan; trainings: number; planned: number }) {
   const [weekStart] = useState(() => startOfWeek(new Date()).toISOString());
   const sessions = useLiveQuery(() => sessionsSince(getDb(), weekStart), [weekStart], []);
   const done = muscleVolume(sessions.flatMap((s) => s.exercises));
+  const [open, setOpen] = useState(false);
+  const target = Math.max(planned, plan.days.length, 1);
   return (
     <Card>
-      <h2 className="text-lg font-semibold">Diese Woche</h2>
-      <p className="mt-1 text-sm text-muted">
-        Harte Sätze pro Muskel ({sessions.length} {sessions.length === 1 ? "Training" : "Trainings"}). Strich = geplant,
-        markierter Bereich = Richtwert.
-      </p>
+      <button type="button" className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span>
+          <span className="block text-lg font-semibold">Diese Woche</span>
+          <span className="block text-sm text-muted">
+            {trainings} von {target} Trainings · harte Sätze je Muskel
+          </span>
+        </span>
+        <ChevronRightIcon className={`size-5 shrink-0 text-muted transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (trainings / target) * 100)}%` }} />
+      </div>
+      {open && (
+        <>
+      <p className="mt-3 text-sm text-muted">Harte Sätze pro Muskel. Strich = geplant, markierter Bereich = Richtwert.</p>
       <div className="mt-3 space-y-3">
         {plan.volume.map((v) => (
           <VolumeBar
@@ -189,51 +192,9 @@ function WeekVolume({ plan }: { plan: StoredPlan }) {
           />
         ))}
       </div>
+        </>
+      )}
     </Card>
   );
 }
 
-function AllDays({ plan }: { plan: StoredPlan }) {
-  const unit = useSettings((s) => s.unitSystem);
-  const { start, starting } = useStartDay();
-  return (
-    <Card className="p-0">
-      <h2 className="px-4 pt-4 text-lg font-semibold">Alle Trainingstage</h2>
-      <div className="mt-2 divide-y divide-border">
-        {plan.days.map((day) => (
-          <details key={day.id} className="group px-4 py-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3">
-              <span className="font-medium">
-                {day.name}
-                {day.dayIndex === plan.nextDayIndex && <span className="ml-2 text-xs text-accent">als Nächstes</span>}
-              </span>
-              <span className="text-sm text-muted">
-                {day.exercises.length} Übungen <span className="inline-block transition-transform group-open:rotate-90">›</span>
-              </span>
-            </summary>
-            <ul className="mt-2 space-y-2 text-sm">
-              {day.exercises.map((e) => {
-                const exercise = getExerciseById(e.exerciseId);
-                return (
-                  <li key={e.id}>
-                    <Link href={`/exercises/${e.exerciseSlug}`} className="font-medium underline-offset-2 hover:underline">
-                      {exercise?.nameDe}
-                    </Link>
-                    <p className="tabular text-muted">
-                      {e.sets} × {e.repsMin}–{e.repsMax} Wdh. · RIR {e.rirMin}–{e.rirMax} · {e.restSeconds} s Pause
-                      {e.targetLoadKg != null && ` · ${formatWeight(e.targetLoadKg, unit)}`}
-                      {e.lastSetTechnique && ` · + ${SET_TYPE_LABELS[e.lastSetTechnique]}`}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-            <button type="button" className={`${buttonStyles.secondary} mt-3 w-full`} disabled={starting} onClick={() => start(plan, day)}>
-              Diesen Tag starten
-            </button>
-          </details>
-        ))}
-      </div>
-    </Card>
-  );
-}

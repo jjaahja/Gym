@@ -74,3 +74,73 @@ export function CloudOffIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function CalendarIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M8 3v4M16 3v4M3.5 10h17" />
+      <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
+      <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
+      <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 5l7 7-7 7" />
+    </Icon>
+  );
+}
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15 5l-7 7 7 7" />
+    </Icon>
+  );
+}
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function SwapIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4L4 7l3 3M4 7h12a4 4 0 0 1 4 4" />
+      <path d="M17 20l3-3-3-3M20 17H8a4 4 0 0 1-4-4" />
+    </Icon>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </Icon>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+    </Icon>
+  );
+}

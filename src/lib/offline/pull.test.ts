@@ -156,3 +156,24 @@ describe("Abgleich Server → Gerät", () => {
     expect(sameContent(null, {})).toBe(false);
   });
 });
+
+describe("Selbstreparatur", () => {
+  it("lädt den Plan erneut hoch, wenn der Server ihn nicht kennt (z. B. App sofort geschlossen)", async () => {
+    const source = await deviceHistory();
+    const device = newDevice();
+    await device.pull(source.server.state(USER));
+    device.entries.length = 0;
+
+    const emptyServer = { ...source.server.state(USER), plan: null, assessment: null, adaptations: [] };
+    const result = await device.pull(emptyServer);
+    expect(result.planRepublished).toBe(true);
+    const tables = (device.entries as { table: string }[]).map((e) => e.table);
+    expect(tables[0]).toBe("user_assessments");
+    expect(tables).toContain("training_plans");
+    expect(tables.filter((t) => t === "plan_days")).toHaveLength(4);
+    expect(tables.at(-1)).toBe("plan_adaptations");
+    expect(tables.indexOf("training_plans")).toBeLessThan(tables.indexOf("plan_days"));
+    // Plan bleibt lokal unverändert
+    expect(device.plans.getState().plan).toEqual(source.plans.getState().plan);
+  });
+});

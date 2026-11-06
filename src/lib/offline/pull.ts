@@ -54,6 +54,8 @@ export interface PullResult {
   planReplaced: boolean;
   /** Warum der Plan nicht angefasst wurde */
   planSkipped: "pending_changes" | "workout_running" | null;
+  /** Lokaler Plan fehlte auf dem Server und wurde erneut hochgeladen */
+  planRepublished?: boolean;
 }
 
 /** Inhaltlicher Vergleich, unabhängig von der Reihenfolge der Objektschlüssel. */
@@ -147,6 +149,10 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   } else if (local.plan && local.plan.userId !== userId) {
     plans.getState().clear();
     result.planReplaced = true;
+  } else if (local.plan && local.plan.userId === userId) {
+    // Server kennt den Plan dieses Geräts nicht (z. B. App direkt nach dem Anlegen geschlossen) → erneut hochladen
+    plans.getState().republish();
+    result.planRepublished = true;
   }
   return result;
 }

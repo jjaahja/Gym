@@ -32,6 +32,31 @@
   zur gewählten Uhrzeit, mit Übungen in der Beschreibung, Link zur App und Erinnerung (keine/15/30/60 min).
   Funktioniert mit Apple Kalender, Google Kalender und Outlook – ohne Konto-Verknüpfung.
 
+### Kalender-Abo (aktualisiert sich selbst)
+
+- **Kalender → „Abonnieren – bleibt automatisch aktuell“:** erzeugt einen persönlichen, geheimen Link
+  (`webcal://…/api/calendar/<token>.ics`, 256 Bit Zufall). Buttons für Apple Kalender (webcal) und Google Kalender,
+  „Link kopieren“ für Outlook u. a. Uhrzeit und Erinnerung einstellbar; „Neuen Link erzeugen“ macht den alten
+  ungültig; „Abo beenden“ löscht ihn.
+- **Inhalt:** Trainingstermine je Wochentag (ab Planbeginn, mit Übungen), Deload-Woche und Mesozyklus-Auswertung als
+  ganztägige Termine. Änderungen am Plan (Wochentage, Tausch, Deload) erscheinen beim nächsten Abruf: Apple Kalender
+  im eingestellten Intervall, Google Kalender nach eigenem Zeitplan (oft einige Stunden).
+- **Sicherheit:** Kalender-Apps senden keine Anmeldung. Die Route ist deshalb öffentlich, die Datenbankfunktion
+  `calendar_feed(token)` (SECURITY DEFINER) gibt nur für einen gültigen Token den Trainingsplan dieses Nutzers heraus –
+  nichts sonst. Tokens sind per Row Level Security nur für den Besitzer lesbar. Geprüft gegen Postgres (ungültige und
+  unbekannte Tokens → nichts, ohne Anmeldung keine Tokens und keine Pläne sichtbar) und live gegen Supabase
+  (Anlegen, Abruf, Uhrzeit ändern, Link erneuern → alter Link 404, Beenden → 404).
+
+## Zuverlässiges Speichern
+
+Beim Live-Test fiel auf: Wurde die App direkt nach „Plan übernehmen“ neu geladen, kam nur ein Teil der ~60 Zeilen in
+die Warteschlange (einzeln geschrieben, der Rest ging beim Neuladen verloren). Behoben:
+
+- Alle Einträge einer Aktion werden gesammelt und in **einer** IndexedDB-Transaktion geschrieben (`enqueueMany`) –
+  schnell und alles oder nichts.
+- **Selbstreparatur:** Kennt der Server den Plan eines Geräts nicht (und es steht nichts mehr aus), lädt der
+  Abgleich ihn vollständig erneut hoch (`republish`, inkl. Anpassungsprotokoll).
+
 ## Übung im Training tauschen
 
 - Jede Planübung hat im Tracker „Übung tauschen“. Vorschläge (`rankAlternatives`), beste zuerst:
@@ -62,12 +87,12 @@
 | Anbindung | Machbar? | Aufwand | Voraussetzungen |
 |---|---|---|---|
 | **Kalender – Export** | ✅ umgesetzt | – | – |
-| **Kalender – Abo** (aktualisiert sich selbst) | ✅ ja | klein | keine neuen Konten. Persönlicher, geheimer Abo-Link (`webcal://…`), den die App aus dem Plan erzeugt. Apple Kalender: Aktualisierungsintervall einstellbar; Google Kalender aktualisiert Abos selbst, laut Erfahrungsberichten etwa alle 12–24 h, nicht einstellbar. |
+| **Kalender – Abo** (aktualisiert sich selbst) | ✅ umgesetzt | klein | keine neuen Konten. Persönlicher, geheimer Abo-Link (`webcal://…`), den die App aus dem Plan erzeugt. Apple Kalender: Aktualisierungsintervall einstellbar; Google Kalender aktualisiert Abos selbst, laut Erfahrungsberichten etwa alle 12–24 h, nicht einstellbar. |
 | **Withings** (Waage) | ✅ ja | mittel | kostenlose Withings-Entwickler-App (Client-ID/Secret). OAuth 2.0, Daten über `getmeas` (Gewicht, Fettanteil, Fett-/Magermasse). Access-Token ca. 3 h, Refresh-Token ca. 12 Monate gültig → Server speichert Tokens und holt neue Messungen (auch per Withings-Benachrichtigung). Ergebnis: Körpermaße füllen sich automatisch. |
 | **Apple Health** | ⚠️ nur mit nativer App | groß | HealthKit hat keine Web-Schnittstelle; eine Web-App/PWA kann es nicht lesen. Nötig: App-Hülle (z. B. Capacitor mit HealthKit-Plugin), Apple-Entwicklerprogramm (kostenpflichtig), Mac mit Xcode, Verteilung über TestFlight/App Store. Behelfe: Withings überträgt Waagendaten ohnehin auch an Apple Health – über die Withings-Anbindung kommen sie also auch zu uns; oder ein iOS-Kurzbefehl, der Werte aus Health per HTTPS an einen persönlichen App-Link schickt. |
 | **Google Fit** | ❌ nicht sinnvoll | – | Google Fit-APIs nehmen seit Mai 2024 keine neuen Entwickler an und werden 2026 abgeschaltet. Nachfolger: **Health Connect** (nur auf dem Android-Gerät, braucht wie Apple Health eine native App) und die **Google Health API** (Cloud, Google-OAuth; Nachfolger der Fitbit-Schnittstelle, für Fitbit-/Google-Geräte). |
 
-**Empfehlung:** zuerst das Kalender-Abo (klein, kein neues Konto), dann Withings (füllt Körpermaße automatisch und
+**Umgesetzt:** das Kalender-Abo (siehe oben). **Empfehlung** für danach: zuerst das Kalender-Abo (klein, kein neues Konto), dann Withings (füllt Körpermaße automatisch und
 deckt über die Withings-Synchronisierung auch Apple Health für Waagendaten ab). Eine native App für Apple Health und
 Health Connect lohnt erst, wenn Schritte, Schlaf oder Herzfrequenz einfließen sollen.
 

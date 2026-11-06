@@ -126,6 +126,8 @@ export interface PlanState {
   swapExercise(planExerciseId: string, replacementSlug: string): AdaptationRecord | null;
   /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
   setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
+  /** Plan erneut vollständig hochladen (Server kennt ihn nicht, z. B. nach unterbrochenem Speichern) */
+  republish(): void;
   /** Stand vom Server übernehmen (anderes Gerät) – erzeugt keine Outbox-Einträge */
   replaceFromServer(state: { plan: StoredPlan | null; adaptations: AdaptationRecord[] }): void;
   clear(): void;
@@ -371,6 +373,36 @@ export function createPlanStore(deps: PlanStoreDeps) {
           return r;
         };
 
+        /** Alle Zeilen eines Plans in FK-sicherer Reihenfolge: Assessment → Equipment → Plan → Tage → Übungen → Profil. */
+        const emitFullPlan = (plan: StoredPlan, timezone?: string) => {
+          const userId = plan.userId;
+          if (!userId) return;
+          deps.sink({ table: "user_assessments", op: "upsert", rowId: plan.assessmentId, payload: assessmentRow(plan) });
+          deps.sink({ table: "user_equipment", op: "delete", rowId: userId, payload: { user_id: userId } });
+          for (const slug of plan.assessment.equipment) {
+            const equipmentId = catalogId("equipment", slug);
+            deps.sink({
+              table: "user_equipment",
+              op: "upsert",
+              rowId: `${userId}:${equipmentId}`,
+              payload: { user_id: userId, equipment_id: equipmentId },
+            });
+          }
+          deps.sink({ table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
+          for (const day of plan.days) {
+            deps.sink({ table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(plan.id, day) });
+          }
+          for (const day of plan.days)
+            for (const e of day.exercises)
+              deps.sink({ table: "plan_exercises", op: "upsert", rowId: e.id, payload: planExerciseRow(day.id, e) });
+          deps.sink({
+            table: "profiles",
+            op: "upsert",
+            rowId: userId,
+            payload: { id: userId, onboarding_completed_at: plan.createdAt, ...(timezone ? { timezone } : {}) },
+          });
+        };
+
         /** Planzeile (Trainingstag, Mesozyklus, Deload) synchronisieren. */
         const emitPlan = () => {
           const plan = get().plan;
@@ -494,37 +526,22 @@ export function createPlanStore(deps: PlanStoreDeps) {
             set({ plan, adaptations: [] });
 
             if (userId) {
-              // Reihenfolge: alter Plan archiviert (nur ein aktiver Plan je Nutzer) → Assessment →
-              // Equipment → Plan → Tage → Übungen → Profil
+              // alter Plan archiviert (nur ein aktiver Plan je Nutzer), dann der neue vollständig
               if (previous?.userId === userId) {
                 deps.sink({ table: "training_plans", op: "upsert", rowId: previous.id, payload: planRow(previous, "archived") });
               }
-              deps.sink({ table: "user_assessments", op: "upsert", rowId: plan.assessmentId, payload: assessmentRow(plan) });
-              deps.sink({ table: "user_equipment", op: "delete", rowId: userId, payload: { user_id: userId } });
-              for (const slug of assessment.equipment) {
-                const equipmentId = catalogId("equipment", slug);
-                deps.sink({
-                  table: "user_equipment",
-                  op: "upsert",
-                  rowId: `${userId}:${equipmentId}`,
-                  payload: { user_id: userId, equipment_id: equipmentId },
-                });
-              }
-              deps.sink({ table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
-              for (const day of plan.days) {
-                deps.sink({ table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(plan.id, day) });
-              }
-              for (const day of plan.days)
-                for (const e of day.exercises)
-                  deps.sink({ table: "plan_exercises", op: "upsert", rowId: e.id, payload: planExerciseRow(day.id, e) });
-              deps.sink({
-                table: "profiles",
-                op: "upsert",
-                rowId: userId,
-                payload: { id: userId, onboarding_completed_at: createdAt, ...(timezone ? { timezone } : {}) },
-              });
+              emitFullPlan(plan, timezone);
             }
             return plan;
+          },
+
+          republish() {
+            const plan = get().plan;
+            if (!plan?.userId) return;
+            emitFullPlan(plan);
+            for (const a of get().adaptations.filter((r) => r.planId === plan.id).reverse()) {
+              deps.sink({ table: "plan_adaptations", op: "upsert", rowId: a.id, payload: adaptationRow(plan.userId, a) });
+            }
           },
 
           advanceDay(completedDayIndex) {

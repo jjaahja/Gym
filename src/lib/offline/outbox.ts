@@ -48,6 +48,13 @@ export async function enqueue(db: GymDB, entry: NewOutboxEntry): Promise<void> {
   await db.outbox.add({ ...entry, createdAt: Date.now(), attempts: 0 });
 }
 
+/** Mehrere Einträge in einer Transaktion – Reihenfolge bleibt erhalten, alles oder nichts. */
+export async function enqueueMany(db: GymDB, entries: readonly NewOutboxEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const createdAt = Date.now();
+  await db.outbox.bulkAdd(entries.map((e) => ({ ...e, createdAt, attempts: 0 })));
+}
+
 /**
  * Überträgt die Outbox strikt in Reihenfolge. Beim ersten Fehler wird abgebrochen,
  * damit abhängige Zeilen (Satz → Übung → Session) nie vor ihren Eltern ankommen.

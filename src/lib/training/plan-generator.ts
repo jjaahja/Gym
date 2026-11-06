@@ -214,7 +214,7 @@ const DAY_LABELS: Record<DayType, string> = {
   legs: "Beine",
 };
 
-const SPLIT_LABELS: Record<SplitType, string> = {
+export const SPLIT_LABELS: Record<SplitType, string> = {
   full_body: "Ganzkörper",
   upper_lower: "Oberkörper/Unterkörper",
   push_pull_legs: "Push/Pull/Beine",
@@ -257,6 +257,13 @@ function chooseSplit(days: number, preferred: SplitType | null | undefined, warn
     warnings.push("Mit weniger als 6 Tagen trainiert Push/Pull/Beine manche Muskeln nur 1× pro Woche.");
   }
   return preferred;
+}
+
+/** Vorschau für das Onboarding: welcher Split bei dieser Tageszahl entsteht. */
+export function previewSplit(daysPerWeek: number, preferred: SplitType | null): { splitType: SplitType; label: string; warnings: string[] } {
+  const warnings: string[] = [];
+  const splitType = chooseSplit(Math.min(Math.max(1, daysPerWeek), 6), preferred, warnings);
+  return { splitType, label: SPLIT_LABELS[splitType], warnings };
 }
 
 // ─────────────────────────── Übungsauswahl ───────────────────────────

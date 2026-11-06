@@ -3,11 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buttonStyles, Card } from "@/components/ui";
+import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { getDb } from "@/lib/offline/db";
+import { clearHistory } from "@/lib/offline/history";
+import { writeToOutbox } from "@/lib/offline/sink";
 import { syncNow, useSyncStatus } from "@/lib/offline/sync";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getCurrentUserId, getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
 import { workoutStore } from "@/stores/workout";
+
+/** Anzeige-Einstellungen auch im Profil speichern (geräteübergreifend). */
+async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: EffortScale }) {
+  const userId = await getCurrentUserId();
+  if (userId) writeToOutbox({ table: "profiles", op: "upsert", rowId: userId, payload: { id: userId, ...patch } });
+}
 
 function Segmented<T extends string>({
   label,
@@ -57,7 +67,9 @@ export function SettingsForm() {
     setSigningOut(true);
     // Lokale Trainingsdaten gehören zum Konto → beim Abmelden vom Gerät entfernen
     await getDb().outbox.clear();
+    await clearHistory(getDb());
     workoutStore.setState({ session: null });
+    planStore.getState().clear();
     await supabase.auth.signOut();
     router.replace("/login");
   }
@@ -68,7 +80,10 @@ export function SettingsForm() {
         <Segmented
           label="Gewichtseinheit"
           value={unitSystem}
-          onChange={setUnitSystem}
+          onChange={(v) => {
+            setUnitSystem(v);
+            void syncProfile({ unit_system: v });
+          }}
           options={[
             { value: "metric", label: "kg" },
             { value: "imperial", label: "lb" },
@@ -78,7 +93,10 @@ export function SettingsForm() {
           <Segmented
             label="Anstrengung angeben als"
             value={effortScale}
-            onChange={setEffortScale}
+            onChange={(v) => {
+              setEffortScale(v);
+              void syncProfile({ effort_scale: v });
+            }}
             options={[
               { value: "rir", label: "RIR" },
               { value: "rpe", label: "RPE" },

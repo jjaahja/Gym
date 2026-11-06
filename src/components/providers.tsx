@@ -5,6 +5,7 @@ import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
 import { getDb } from "@/lib/offline/db";
 import { syncNow, useSyncStatus } from "@/lib/offline/sync";
+import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
 import { workoutStore } from "@/stores/workout";
 
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 function StoreHydration() {
   useEffect(() => {
     void workoutStore.persist.rehydrate();
+    void planStore.persist.rehydrate();
     void useSettings.persist.rehydrate();
   }, []);
   return null;

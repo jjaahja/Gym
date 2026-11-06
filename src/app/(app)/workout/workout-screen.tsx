@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { buttonStyles, Card } from "@/components/ui";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { Sheet } from "@/components/sheet";
+import { buttonStyles, ButtonLink, Card } from "@/components/ui";
+import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable } from "@/lib/catalog";
+import { getDb } from "@/lib/offline/db";
 import { useSyncStatus } from "@/lib/offline/sync";
 import { getCurrentUserId } from "@/lib/supabase/client";
-import { useWorkout, useWorkoutHydrated } from "@/stores/workout";
+import { muscleVolume } from "@/lib/training/volume";
+import { completeWorkout } from "@/lib/workout/complete";
+import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
+import type { StoredPlan } from "@/stores/plan-store";
+import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
+import type { ActiveSession } from "@/stores/workout-store";
+import { ExerciseCard } from "./exercise-card";
+import { RestTimer } from "./rest-timer";
+import { useCompletion, useRestTimer } from "./ui-state";
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -25,90 +37,324 @@ function formatDuration(ms: number): string {
 }
 
 export function WorkoutScreen() {
-  const hydrated = useWorkoutHydrated();
+  const workoutReady = useWorkoutHydrated();
+  const planReady = usePlanHydrated();
   const session = useWorkout((s) => s.session);
+  const result = useCompletion((s) => s.result);
 
-  if (!hydrated) return <Card className="h-32 animate-pulse">{null}</Card>;
-  return session ? <RunningWorkout /> : <StartWorkout />;
+  if (!workoutReady || !planReady) return <Card className="h-32 animate-pulse">{null}</Card>;
+  if (session) return <ActiveWorkout session={session} />;
+  if (result) return <CompletionSummary />;
+  return <StartWorkout />;
 }
 
+// ─────────────────────────── Start ───────────────────────────
+
 function StartWorkout() {
-  const start = useWorkout((s) => s.start);
+  const plan = usePlan((s) => s.plan);
   const [starting, setStarting] = useState(false);
 
-  async function handleStart() {
+  async function start(dayId: string | null) {
     setStarting(true);
     try {
-      start({ userId: await getCurrentUserId() });
+      workoutStore.getState().start({ userId: await getCurrentUserId(), planId: dayId ? plan!.id : null, planDayId: dayId });
     } finally {
       setStarting(false);
     }
   }
 
   return (
-    <Card>
-      <h2 className="text-lg font-semibold">Kein Training aktiv</h2>
-      <p className="mt-1 text-sm text-muted">
-        Starte ein freies Training. Mit Trainingsplan, „Letztes Mal“-Werten und Richtwerten pro Satz geht es in
-        Schritt 4 weiter.
-      </p>
-      <button type="button" onClick={handleStart} disabled={starting} className={`${buttonStyles.primary} mt-4 w-full`}>
-        Training starten
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold tracking-tight">Training</h1>
+      {plan ? (
+        <Card>
+          <h2 className="text-lg font-semibold">Welcher Tag?</h2>
+          <div className="mt-3 space-y-2">
+            {plan.days.map((day) => {
+              const next = day.dayIndex === plan.nextDayIndex;
+              return (
+                <button
+                  key={day.id}
+                  type="button"
+                  disabled={starting}
+                  onClick={() => start(day.id)}
+                  className={`flex min-h-14 w-full items-center justify-between rounded-xl border px-4 text-left ${
+                    next ? "border-accent bg-accent-soft" : "border-border"
+                  }`}
+                >
+                  <span>
+                    <span className="block font-semibold">{day.name}</span>
+                    <span className="block text-sm text-muted">
+                      {day.exercises.length} Übungen · ca. {day.estimatedMinutes} min
+                    </span>
+                  </span>
+                  {next && <span className="text-xs font-semibold text-accent">Als Nächstes</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <h2 className="text-lg font-semibold">Noch kein Plan</h2>
+          <p className="mt-1 text-sm text-muted">Mit Plan bekommst du Zielwerte, Gewichtsvorschläge und automatische Steigerungen.</p>
+          <div className="mt-3">
+            <ButtonLink href="/onboarding">Plan erstellen</ButtonLink>
+          </div>
+        </Card>
+      )}
+      <button type="button" className={`${buttonStyles.secondary} w-full`} disabled={starting} onClick={() => start(null)}>
+        Freies Training ohne Plan
       </button>
-    </Card>
+    </div>
   );
 }
 
-function RunningWorkout() {
-  const session = useWorkout((s) => s.session)!;
-  const finish = useWorkout((s) => s.finish);
-  const discard = useWorkout((s) => s.discard);
-  const { pending, syncing, lastError } = useSyncStatus();
-  const now = useNow(1000);
+// ─────────────────────────── Laufendes Training ───────────────────────────
 
-  const completedSets = session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.isCompleted).length, 0);
-  const syncLabel = !session.userId
-    ? "Nur lokal (Demo)"
-    : syncing
-      ? "Synchronisiere …"
-      : pending > 0
-        ? `${pending} Änderungen ausstehend`
-        : "Synchronisiert";
+function ActiveWorkout({ session }: { session: ActiveSession }) {
+  const plan = usePlan((s) => s.plan);
+  const { pending, syncing } = useSyncStatus();
+  const now = useNow(1000);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const day = plan && session.planId === plan.id ? plan.days.find((d) => d.id === session.planDayId) ?? null : null;
+  const goal = plan?.goal ?? "hypertrophy";
+  const experience = plan?.experience ?? "intermediate";
+
+  // Planübungen des Tages + spontan hinzugefügte Übungen
+  const items = useMemo(() => {
+    const planned = (day?.exercises ?? []).map((pe) => ({
+      key: pe.id,
+      exercise: getExerciseById(pe.exerciseId)!,
+      planned: pe,
+      log: session.exercises.find((e) => e.planExerciseId === pe.id) ?? null,
+    }));
+    const extra = session.exercises
+      .filter((e) => !e.planExerciseId || !day?.exercises.some((pe) => pe.id === e.planExerciseId))
+      .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, planned: null, log: e }));
+    return [...planned, ...extra].filter((i) => i.exercise);
+  }, [day, session.exercises]);
+
+  const firstOpen = items.findIndex((i) => (i.log?.sets.filter((s) => s.setType === "working").length ?? 0) < (i.planned?.sets ?? 3));
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const activeKey = expandedKey ?? items[firstOpen >= 0 ? firstOpen : 0]?.key ?? null;
+
+  const completedSets = session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.isCompleted && s.setType !== "warmup").length, 0);
+  const syncLabel = !session.userId ? "Nur lokal" : syncing ? "Synchronisiere …" : pending > 0 ? `${pending} ausstehend` : "Synchronisiert";
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex items-baseline justify-between">
-          <p className="text-sm text-muted">Dauer</p>
-          <p className="text-xs text-muted" title={lastError ?? undefined}>
-            {syncLabel}
+    <div className="space-y-3 pb-40">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{day?.name ?? "Freies Training"}</h1>
+          <p className="tabular text-sm text-muted">
+            {formatDuration(now - Date.parse(session.startedAt))} · {completedSets} {completedSets === 1 ? "Satz" : "Sätze"} · {syncLabel}
           </p>
         </div>
-        <p className="tabular mt-1 text-4xl font-bold">{formatDuration(now - Date.parse(session.startedAt))}</p>
-        <p className="mt-1 text-sm text-muted">
-          {session.exercises.length} Übungen · {completedSets} Sätze
-        </p>
-      </Card>
-
-      <Card>
-        <p className="text-sm text-muted">
-          Übungen hinzufügen und Sätze eintragen – mit Gewichtsvorschlag und „Letztes Mal“-Werten – kommt mit dem
-          Live-Tracker in Schritt 4.
-        </p>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          className={buttonStyles.danger}
-          onClick={() => {
-            if (window.confirm("Training verwerfen? Eingetragene Sätze werden nicht gewertet.")) discard();
-          }}
-        >
-          Verwerfen
-        </button>
-        <button type="button" className={buttonStyles.primary} disabled={completedSets === 0} onClick={finish}>
+        <button type="button" className={`${buttonStyles.primary} min-h-11 px-4 text-sm`} onClick={() => setFinishOpen(true)}>
           Beenden
+        </button>
+      </div>
+
+      {items.length === 0 && (
+        <Card>
+          <p className="text-sm text-muted">Füge eine Übung hinzu, um loszulegen.</p>
+        </Card>
+      )}
+
+      {items.map((item, index) => {
+        const nextOpen = items.slice(index + 1).find((i) => (i.log?.sets.filter((s) => s.setType === "working").length ?? 0) < (i.planned?.sets ?? 3));
+        return (
+        <ExerciseCard
+          key={item.key}
+          exercise={item.exercise}
+          planned={item.planned}
+          log={item.log}
+          sessionId={session.id}
+          sessionExercises={session.exercises}
+          goal={goal}
+          experience={experience}
+          expanded={activeKey === item.key}
+          onToggle={() => setExpandedKey(activeKey === item.key ? "" : item.key)}
+          onActivity={() => setExpandedKey(item.key)}
+          onNext={nextOpen ? () => setExpandedKey(nextOpen.key) : undefined}
+        />
+        );
+      })}
+
+      <button type="button" className={`${buttonStyles.secondary} w-full`} onClick={() => setAddOpen(true)}>
+        + Übung hinzufügen
+      </button>
+
+      <RestTimer />
+      <AddExerciseSheet open={addOpen} onClose={() => setAddOpen(false)} plan={plan} onAdded={(key) => setExpandedKey(key)} />
+      <FinishSheet open={finishOpen} onClose={() => setFinishOpen(false)} session={session} />
+    </div>
+  );
+}
+
+function AddExerciseSheet({
+  open,
+  onClose,
+  plan,
+  onAdded,
+}: {
+  open: boolean;
+  onClose: () => void;
+  plan: StoredPlan | null;
+  onAdded: (key: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const options = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase("de");
+    return catalog
+      .filter((e) => !plan || isExerciseAvailable(e, plan.assessment.equipment, "advanced"))
+      .filter((e) => q === "" || e.nameDe.toLocaleLowerCase("de").includes(q))
+      .slice(0, 40);
+  }, [query, plan]);
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Übung hinzufügen">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Übung suchen"
+        aria-label="Übung suchen"
+        className="block min-h-12 w-full rounded-xl border border-border bg-surface px-4 text-base outline-none focus:border-accent"
+      />
+      <ul className="mt-3 divide-y divide-border">
+        {options.map((e) => (
+          <li key={e.id}>
+            <button
+              type="button"
+              className="flex min-h-12 w-full items-center justify-between gap-3 text-left"
+              onClick={() => {
+                onAdded(workoutStore.getState().addExercise(e.id));
+                setQuery("");
+                onClose();
+              }}
+            >
+              <span className="font-medium">{e.nameDe}</span>
+              <span className="text-xs text-muted">{getMuscle(e.muscles[0].muscle).nameDe.replace(/ \(.*\)$/, "")}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Sheet>
+  );
+}
+
+// ─────────────────────────── Abschluss ───────────────────────────
+
+const RPE_OPTIONS = [5, 6, 7, 8, 9, 10];
+
+function FinishSheet({ open, onClose, session }: { open: boolean; onClose: () => void; session: ActiveSession }) {
+  const [rpe, setRpe] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const hasSets = session.exercises.some((e) => e.sets.some((s) => s.isCompleted && s.setType !== "warmup"));
+  const volume = muscleVolume(session.exercises);
+  const top = [...volume.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+
+  async function finish() {
+    setSaving(true);
+    try {
+      useRestTimer.getState().stop();
+      const result = await completeWorkout({ db: getDb(), workout: workoutStore, plans: planStore, sessionRpe: rpe });
+      useCompletion.getState().setResult(result);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function discard() {
+    if (window.confirm("Training verwerfen? Eingetragene Sätze werden nicht gewertet.")) {
+      useRestTimer.getState().stop();
+      workoutStore.getState().discard();
+      onClose();
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Training beenden">
+      {hasSets ? (
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium">Harte Sätze heute</p>
+            <ul className="mt-1 text-sm text-muted">
+              {top.map(([m, v]) => (
+                <li key={m} className="flex justify-between">
+                  <span>{getMuscle(m).nameDe.replace(/ \(.*\)$/, "")}</span>
+                  <span className="tabular">{v.total.toLocaleString("de-DE", { maximumFractionDigits: 1 })}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <fieldset>
+            <legend className="text-sm font-medium">Wie anstrengend war das Training insgesamt?</legend>
+            <p className="text-xs text-muted">Session-RPE: 10 = maximal. Hilft zu erkennen, wann eine leichtere Woche sinnvoll ist.</p>
+            <div className="mt-2 grid grid-cols-6 gap-1.5">
+              {RPE_OPTIONS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={rpe === v}
+                  onClick={() => setRpe(rpe === v ? null : v)}
+                  className={`min-h-11 rounded-lg border font-semibold ${rpe === v ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <button type="button" className={`${buttonStyles.primary} w-full`} onClick={finish} disabled={saving}>
+            Speichern & beenden
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">Noch keine Arbeitssätze eingetragen.</p>
+      )}
+      <button type="button" className={`${buttonStyles.danger} mt-3 w-full`} onClick={discard}>
+        Training verwerfen
+      </button>
+    </Sheet>
+  );
+}
+
+function CompletionSummary() {
+  const result = useCompletion((s) => s.result)!;
+  const minutes = Math.round((Date.parse(result.session.endedAt) - Date.parse(result.session.startedAt)) / 60000);
+  const sets = result.session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.setType !== "warmup").length, 0);
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold tracking-tight">Stark! Training gespeichert.</h1>
+      <Card>
+        <p className="tabular">
+          <span className="text-2xl font-bold">{minutes}</span> min · <span className="text-2xl font-bold">{sets}</span> Sätze ·{" "}
+          <span className="text-2xl font-bold">{result.session.exercises.length}</span> Übungen
+        </p>
+      </Card>
+      <Card>
+        <h2 className="font-semibold">Fürs nächste Mal</h2>
+        {result.adaptations.length > 0 ? (
+          <ul className="mt-2 space-y-2 text-sm">
+            {result.adaptations.map((a) => (
+              <li key={a.id}>{a.explanation}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-muted">Gewichte bleiben gleich – steigere zuerst die Wiederholungen bis zum oberen Ende des Bereichs.</p>
+        )}
+      </Card>
+      <div className="grid grid-cols-2 gap-3">
+        <Link href="/dashboard" className={buttonStyles.primary} onClick={() => useCompletion.getState().setResult(null)}>
+          Zum Plan
+        </Link>
+        <button type="button" className={buttonStyles.secondary} onClick={() => useCompletion.getState().setResult(null)}>
+          Fertig
         </button>
       </div>
     </div>

@@ -7,7 +7,8 @@ import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { getDb } from "@/lib/offline/db";
 import { clearHistory } from "@/lib/offline/history";
 import { writeToOutbox } from "@/lib/offline/sink";
-import { syncNow, useSyncStatus } from "@/lib/offline/sync";
+import { resetDeviceSync, syncDevice } from "@/lib/offline/device-sync";
+import { useSyncStatus } from "@/lib/offline/sync";
 import { getCurrentUserId, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
@@ -21,7 +22,7 @@ async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: Eff
 
 export function SettingsForm() {
   const { unitSystem, effortScale, setUnitSystem, setEffortScale } = useSettings();
-  const { pending, syncing, lastError, lastSyncedAt } = useSyncStatus();
+  const { pending, syncing, lastError, lastSyncedAt, pulling, lastPulledAt, pullError } = useSyncStatus();
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -35,6 +36,8 @@ export function SettingsForm() {
     // Lokale Trainingsdaten gehören zum Konto → beim Abmelden vom Gerät entfernen
     await getDb().outbox.clear();
     await clearHistory(getDb());
+    await getDb().measurements.clear();
+    resetDeviceSync();
     workoutStore.setState({ session: null });
     planStore.getState().clear();
     await supabase.auth.signOut();
@@ -85,14 +88,20 @@ export function SettingsForm() {
               {pending === 0 ? "Alles synchronisiert." : `${pending} Änderungen warten auf Netz.`}
               {lastSyncedAt && ` Zuletzt: ${new Date(lastSyncedAt).toLocaleTimeString("de-DE")}.`}
             </p>
-            {lastError && <p className="mt-2 text-sm text-danger">Letzter Fehler: {lastError}</p>}
+            <p className="mt-1 text-sm text-muted">
+              {lastPulledAt
+                ? `Stand vom Server geladen: ${new Date(lastPulledAt).toLocaleTimeString("de-DE")}. Plan, Trainings und Körpermaße sind auf allen Geräten gleich.`
+                : "Plan, Trainings und Körpermaße werden beim Start vom Server geladen."}
+            </p>
+            {lastError && <p className="mt-2 text-sm text-danger">Letzter Fehler beim Hochladen: {lastError}</p>}
+            {pullError && <p className="mt-2 text-sm text-danger">Letzter Fehler beim Laden: {pullError}</p>}
             <button
               type="button"
               className={`${buttonStyles.secondary} mt-3 w-full`}
-              disabled={syncing || pending === 0}
-              onClick={() => void syncNow()}
+              disabled={syncing || pulling}
+              onClick={() => void syncDevice({ force: true })}
             >
-              {syncing ? "Synchronisiere …" : "Jetzt synchronisieren"}
+              {syncing || pulling ? "Synchronisiere …" : "Jetzt synchronisieren"}
             </button>
           </>
         ) : (

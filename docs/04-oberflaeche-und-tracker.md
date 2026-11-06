@@ -88,8 +88,7 @@ Beenden ─────► lokale Historie (IndexedDB) ──► „Letztes Mal�
 
 ## Bekannte Grenzen
 
-- **Kein Abgleich vom Server zum Gerät:** Auf einem neuen Gerät fehlen Plan und Historie lokal. Die Daten liegen in
-  Supabase, werden aber noch nicht zurückgeladen.
+- ~~Kein Abgleich vom Server zum Gerät~~ – erledigt in [Schritt 6](06-geraete-abgleich.md).
 - ~~Mesozyklus-Ende noch nicht in der Oberfläche~~ – erledigt in [Schritt 5](05-fortschritt-und-mesozyklus.md).
 - **Pausen-Timer ohne Push-Benachrichtigung:** Er vibriert nur bei geöffneter App.
 - **Erklärtexte nur in kg:** Begründungen zu Anpassungen nennen Gewichte in kg, auch wenn lb gewählt ist.

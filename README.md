@@ -22,7 +22,8 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **2. Setup & Boilerplate** – [Doku](docs/02-setup-architektur.md)
 - [x] **3. Übungs-Datenbank, wissenschaftliche Richtwerte & Plan-Generierung** – [Doku](docs/03-katalog-und-logik.md)
 - [x] **4. UI: Onboarding, Dashboard, Live-Workout-Tracker** – [Doku](docs/04-oberflaeche-und-tracker.md)
-- [x] **5. Datenvisualisierung & Mesozyklus-Abschluss** (Kraft, Wochenvolumen, Körpermaße, Pump; Volumen-, Deload- und Wechselentscheidungen) – [Doku](docs/05-fortschritt-und-mesozyklus.md) – *wartet auf Freigabe*
+- [x] **5. Datenvisualisierung & Mesozyklus-Abschluss** (Kraft, Wochenvolumen, Körpermaße, Pump; Volumen-, Deload- und Wechselentscheidungen) – [Doku](docs/05-fortschritt-und-mesozyklus.md)
+- [x] **6. Geräte-Abgleich** (Server → Gerät: Plan, Protokoll, Trainings, Körpermaße, Einstellungen; Kontowechsel) – [Doku](docs/06-geraete-abgleich.md) – *wartet auf Freigabe*
 
 ## Tech-Stack
 
@@ -40,3 +41,4 @@ Dexie (IndexedDB) · Vitest
 | `npm run db:seed` | `supabase/seed.sql` aus dem Katalog neu erzeugen |
 | `npx tsx scripts/verify-resolver-parity.ts \| psql <db>` | Richtwert-Auflösung App = Datenbank |
 | `npx tsx scripts/verify-sync-contract.ts \| psql <db>` | Outbox-Zeilen unter RLS, Views = App-Berechnung |
+| `npx tsx scripts/verify-pull-contract.ts …` | Server-JSON → identischer Gerätezustand (Ablauf im Skriptkopf) |

@@ -1,7 +1,14 @@
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 import { GymDB } from "./db";
-import { deleteMeasurement, listMeasurements, saveMeasurement, validateMeasurement, type MeasurementInput } from "./measurements";
+import {
+  deleteMeasurement,
+  listMeasurements,
+  measurementId,
+  saveMeasurement,
+  validateMeasurement,
+  type MeasurementInput,
+} from "./measurements";
 import type { NewOutboxEntry } from "./outbox";
 
 const empty: MeasurementInput = {
@@ -45,12 +52,14 @@ describe("Körpermaße", () => {
     const rows = await listMeasurements(db);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ bodyWeightKg: 82.1, waistCm: null, armCm: 38.5 });
+    const id = measurementId("user-1", "2026-11-06");
+    expect(first.id).toBe(id);
     expect(entries.at(-1)).toEqual({
       table: "body_measurements",
       op: "upsert",
-      rowId: "m-1",
+      rowId: id,
       payload: {
-        id: "m-1",
+        id,
         user_id: "user-1",
         measured_on: "2026-11-06",
         body_weight_kg: 82.1,
@@ -66,9 +75,19 @@ describe("Körpermaße", () => {
       },
     });
 
-    await deleteMeasurement(db, "m-1", options);
+    await deleteMeasurement(db, id, options);
     expect(await listMeasurements(db)).toEqual([]);
-    expect(entries.at(-1)).toEqual({ table: "body_measurements", op: "delete", rowId: "m-1", payload: { id: "m-1" } });
+    expect(entries.at(-1)).toEqual({ table: "body_measurements", op: "delete", rowId: id, payload: { id } });
+  });
+
+  it("vergibt je Konto und Tag dieselbe ID – zwei Geräte offline schreiben dieselbe Zeile", async () => {
+    const sink = () => {};
+    const a = await saveMeasurement(freshDb(), { ...empty, bodyWeightKg: 82 }, { userId: "user-1", sink });
+    const b = await saveMeasurement(freshDb(), { ...empty, waistCm: 84 }, { userId: "user-1", sink });
+    const other = await saveMeasurement(freshDb(), { ...empty, waistCm: 84 }, { userId: "user-2", sink });
+    expect(a.id).toBe(b.id);
+    expect(other.id).not.toBe(a.id);
+    expect(a.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it("sortiert nach Datum und synchronisiert im Demo-Modus nichts", async () => {

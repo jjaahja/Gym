@@ -9,6 +9,12 @@ interface SyncStatus {
   syncing: boolean;
   lastError: string | null;
   lastSyncedAt: string | null;
+  /** Abgleich Server → Gerät */
+  pulling: boolean;
+  lastPulledAt: string | null;
+  pullError: string | null;
+  /** Erster Abgleich nach dem Start: solange „pending“, zeigt ein leeres Gerät „Lade Daten …“ statt „kein Plan“ */
+  firstPull: "pending" | "done" | "skipped" | "failed";
 }
 
 export const useSyncStatus = create<SyncStatus>(() => ({
@@ -16,6 +22,10 @@ export const useSyncStatus = create<SyncStatus>(() => ({
   syncing: false,
   lastError: null,
   lastSyncedAt: null,
+  pulling: false,
+  lastPulledAt: null,
+  pullError: null,
+  firstPull: "pending",
 }));
 
 /** Überträgt die Outbox, sofern online, konfiguriert und angemeldet. */

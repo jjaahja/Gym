@@ -2,7 +2,7 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 import { createStore } from "zustand/vanilla";
 import type { EquipmentSlug } from "@/data/catalog/equipment";
 import type { MuscleSlug, TrackedMuscle } from "@/data/catalog/muscles";
-import { getExercise } from "@/lib/catalog";
+import { equipmentList, getExercise } from "@/lib/catalog";
 import type { ExperienceLevel, PlanStatus, SplitType, TrainingGoal } from "@/lib/db/enums";
 import { catalogId } from "@/lib/db/stable-id";
 import type { NewOutboxEntry } from "@/lib/offline/outbox";
@@ -117,6 +117,8 @@ export interface PlanState {
   rejectSuggestion(adaptationId: string): void;
   /** Mesozyklus abschließen: Volumen anpassen, Entscheidungen protokollieren, neuen Zyklus beginnen */
   completeMesocycle(decision: MesocycleDecision): AdaptationRecord[];
+  /** Stand vom Server übernehmen (anderes Gerät) – erzeugt keine Outbox-Einträge */
+  replaceFromServer(state: { plan: StoredPlan | null; adaptations: AdaptationRecord[] }): void;
   clear(): void;
 }
 
@@ -129,7 +131,7 @@ export interface PlanStoreDeps {
 
 // ─────────────────────────── DB-Zeilen ───────────────────────────
 
-function planRow(plan: StoredPlan, status: PlanStatus) {
+export function planRow(plan: StoredPlan, status: PlanStatus) {
   return {
     id: plan.id,
     user_id: plan.userId,
@@ -143,10 +145,29 @@ function planRow(plan: StoredPlan, status: PlanStatus) {
     current_week: 1,
     generator_version: plan.generatorVersion,
     started_at: plan.startedAt,
+    created_at: plan.createdAt,
+    next_day_index: plan.nextDayIndex,
+    cycle_started_at: plan.cycleStartedAt,
+    completed_mesocycles: plan.completedMesocycles,
+    deload_week_start: plan.deloadWeekStart,
+    last_deload_at: plan.lastDeloadAt,
+    warnings: plan.warnings,
+    muscle_targets: plan.volume.map((v) => ({
+      muscle_group_id: catalogId("muscle", v.muscle),
+      target_sets: v.targetSets,
+      min: v.min,
+      max: v.max,
+      frequency: v.frequency,
+      priority: v.priority,
+    })),
   };
 }
 
-function assessmentRow(plan: StoredPlan) {
+export function planDayRow(planId: string, day: StoredPlanDay) {
+  return { id: day.id, plan_id: planId, day_index: day.dayIndex, name: day.name, weekday: null, day_type: day.type };
+}
+
+export function assessmentRow(plan: StoredPlan) {
   const a = plan.assessment;
   return {
     id: plan.assessmentId,
@@ -163,7 +184,7 @@ function assessmentRow(plan: StoredPlan) {
   };
 }
 
-function planExerciseRow(dayId: string, e: StoredPlanExercise) {
+export function planExerciseRow(dayId: string, e: StoredPlanExercise) {
   return {
     id: e.id,
     plan_day_id: dayId,
@@ -183,7 +204,7 @@ function planExerciseRow(dayId: string, e: StoredPlanExercise) {
   };
 }
 
-function adaptationRow(userId: string | null, r: AdaptationRecord) {
+export function adaptationRow(userId: string | null, r: AdaptationRecord) {
   return {
     id: r.id,
     user_id: userId,
@@ -238,8 +259,8 @@ export function deloadPrescription<T extends Pick<PlannedExercise, "sets" | "rir
   return { ...e, sets: Math.max(1, Math.ceil(e.sets / 2)), rirMin: 3, rirMax: 4, lastSetTechnique: null };
 }
 
-/** Geplantes Volumen je Muskel neu berechnen (nach Satz- oder Übungsänderungen). */
-function refreshVolume(plan: StoredPlan): StoredPlan {
+/** Geplantes Volumen und Dauer neu berechnen (nach Satz- oder Übungsänderungen, beim Laden vom Server). */
+export function withPlannedVolume(plan: StoredPlan): StoredPlan {
   const planned = planVolume(plan.days);
   return {
     ...plan,
@@ -302,7 +323,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
               return next;
             }),
           }));
-          const nextPlan = refreshVolume({ ...plan, days });
+          const nextPlan = withPlannedVolume({ ...plan, days });
           set({ plan: nextPlan });
           for (const { dayId, exercise } of touched)
             emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: exercise.id, payload: planExerciseRow(dayId, exercise) });
@@ -339,6 +360,12 @@ export function createPlanStore(deps: PlanStoreDeps) {
           const plan = get().plan;
           emit(plan, { table: "plan_adaptations", op: "upsert", rowId: r.id, payload: adaptationRow(plan?.userId ?? null, r) });
           return r;
+        };
+
+        /** Planzeile (Trainingstag, Mesozyklus, Deload) synchronisieren. */
+        const emitPlan = () => {
+          const plan = get().plan;
+          if (plan) emit(plan, { table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
         };
 
         /** Volumenänderung für einen Muskel auf die Planübungen verteilen; liefert before/after mit den Satzzahlen. */
@@ -386,6 +413,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
           const cycleStartedAt =
             reason === "mesocycle_end" ? new Date(start.getTime() + WEEK_MS).toISOString() : plan.cycleStartedAt;
           set({ plan: { ...plan, deloadWeekStart: start.toISOString(), lastDeloadAt: start.toISOString(), cycleStartedAt } });
+          emitPlan();
           return before;
         };
 
@@ -413,8 +441,11 @@ export function createPlanStore(deps: PlanStoreDeps) {
           plan: null,
           adaptations: [],
 
-          createPlan({ userId, assessment, generated, timezone }) {
+          createPlan({ userId, assessment: input, generated, timezone }) {
             const previous = get().plan;
+            // Ausstattung in Katalog-Reihenfolge – so wie sie vom Server zurückkommt
+            const chosen = new Set(input.equipment);
+            const assessment = { ...input, equipment: equipmentList.map((e) => e.slug).filter((slug) => chosen.has(slug)) };
             const createdAt = now().toISOString();
             const plan: StoredPlan = {
               id: uuid(),
@@ -467,12 +498,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
               }
               deps.sink({ table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
               for (const day of plan.days) {
-                deps.sink({
-                  table: "plan_days",
-                  op: "upsert",
-                  rowId: day.id,
-                  payload: { id: day.id, plan_id: plan.id, day_index: day.dayIndex, name: day.name, weekday: null },
-                });
+                deps.sink({ table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(plan.id, day) });
               }
               for (const day of plan.days)
                 for (const e of day.exercises)
@@ -490,7 +516,9 @@ export function createPlanStore(deps: PlanStoreDeps) {
           advanceDay(completedDayIndex) {
             const plan = get().plan;
             if (!plan) return;
-            set({ plan: { ...plan, nextDayIndex: (completedDayIndex + 1) % plan.days.length } });
+            const next = { ...plan, nextDayIndex: (completedDayIndex + 1) % plan.days.length };
+            set({ plan: next });
+            emitPlan();
           },
 
           setTargetLoad(planExerciseId, loadKg) {
@@ -532,6 +560,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
                   cycleStartedAt: before.previous_cycle_started_at ?? plan.cycleStartedAt,
                 },
               });
+              emitPlan();
             } else {
               return;
             }
@@ -586,9 +615,12 @@ export function createPlanStore(deps: PlanStoreDeps) {
               const done = accept(record(plan, { ...s.proposal, status: "suggested" }, s.planExerciseId));
               if (done) records.push(save(done));
             }
-            const current = get().plan!;
-            emit(current, { table: "training_plans", op: "upsert", rowId: current.id, payload: planRow(current, "active") });
+            emitPlan();
             return records;
+          },
+
+          replaceFromServer({ plan, adaptations }) {
+            set({ plan, adaptations });
           },
 
           clear() {

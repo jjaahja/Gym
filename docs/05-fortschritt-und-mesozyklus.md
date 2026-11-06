@@ -86,8 +86,7 @@ Details der Regeln: [Adaptions-Strategie](adaptions-strategie.md).
 
 ## Bekannte Grenzen
 
-- **Kein Abgleich vom Server zum Gerät** (wie Schritt 4): Historie und Körpermaße eines anderen Geräts erscheinen
-  nicht lokal.
+- ~~Kein Abgleich vom Server zum Gerät~~ – erledigt in [Schritt 6](06-geraete-abgleich.md).
 - **Der Trend je Muskel** beruht auf dem e1RM der Übungen mit diesem Primärmuskel; Körpergewichtsübungen
   ohne Zusatzlast fließen nicht ein.
 - **Kein Zeitraumfilter:** Volumen zeigt fest 8 Wochen, Kraft und Körper den gesamten Verlauf.

@@ -5,7 +5,9 @@
 // so wie PostgREST/Supabase es täte. Anschließend vergleicht SQL die Ergebnisse der DB-Views mit
 // den Berechnungen der App (Wochenvolumen, „Letztes Mal“, e1RM).
 //
-// Aufruf (nach Migration + Seed):  npx tsx scripts/verify-sync-contract.ts | psql -v ON_ERROR_STOP=1 <db>
+// Aufruf (nach Migration + Seed):  npx tsx scripts/verify-sync-contract.ts [--state state.json] | psql -v ON_ERROR_STOP=1 <db>
+// Mit --state wird zusätzlich der lokale Stand der Geräte gespeichert – Grundlage für scripts/verify-pull-contract.ts.
+import { writeFileSync } from "node:fs";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import type { StateStorage } from "zustand/middleware";
 import { EQUIPMENT_PRESETS } from "../src/data/catalog/equipment";
@@ -145,6 +147,10 @@ async function main() {
   await deleteMeasurement(db, dropped.id, mOptions);
   await saveMeasurement(db, { ...empty, measuredOn: "2026-11-16", shouldersCm: 121.5, waistCm: 83.4 }, mOptions);
 
+  // Stand des ersten Plans, bevor er archiviert wird (für den Lese-Vertrag)
+  const firstPlan = structuredClone(plans.getState().plan!);
+  const firstAdaptations = structuredClone(plans.getState().adaptations);
+
   // ── Verworfenes Training und neuer Plan (alter wird archiviert) ──
   workout.getState().start({ userId: USER });
   workout.getState().discard();
@@ -163,11 +169,16 @@ async function main() {
 
   // ── SQL ausgeben ──
   const sql: string[] = [];
-  const lit = (v: unknown): string => {
+  const JSON_COLUMNS = new Set(["before_state", "after_state", "muscle_targets"]);
+  const lit = (v: unknown, column = ""): string => {
     if (v === null || v === undefined) return "null";
     if (typeof v === "number" || typeof v === "boolean") return String(v);
-    if (Array.isArray(v)) return `'{${v.join(",")}}'`;
-    if (typeof v === "object") return `'${JSON.stringify(v).replaceAll("'", "''")}'`;
+    if (typeof v === "object" && (JSON_COLUMNS.has(column) || !Array.isArray(v))) return `'${JSON.stringify(v).replaceAll("'", "''")}'`;
+    if (Array.isArray(v)) {
+      // Postgres-Array-Literal: Elemente in Anführungszeichen (Hinweistexte enthalten Kommas)
+      const array = `{${v.map((x) => `"${String(x).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`).join(",")}}`;
+      return `'${array.replaceAll("'", "''")}'`;
+    }
     return `'${String(v).replaceAll("'", "''")}'`;
   };
   const pk: Record<string, string[]> = { user_equipment: ["user_id", "equipment_id"] };
@@ -180,7 +191,7 @@ async function main() {
       const keys = pk[e.table] ?? ["id"];
       const updates = cols.filter((c) => !keys.includes(c)).map((c) => `${c} = excluded.${c}`);
       sql.push(
-        `insert into public.${e.table} (${cols.join(", ")}) values (${cols.map((c) => lit(e.payload[c])).join(", ")}) ` +
+        `insert into public.${e.table} (${cols.join(", ")}) values (${cols.map((c) => lit(e.payload[c], c)).join(", ")}) ` +
           `on conflict (${keys.join(", ")}) do ${updates.length ? `update set ${updates.join(", ")}` : "nothing"};`,
       );
     } else {
@@ -262,6 +273,22 @@ begin
 end $$;`);
   sql.push("commit;");
   console.log(sql.join("\n"));
+
+  const stateIndex = process.argv.indexOf("--state");
+  if (stateIndex > 0) {
+    writeFileSync(
+      process.argv[stateIndex + 1],
+      JSON.stringify({
+        userId: USER,
+        plans: [
+          { plan: firstPlan, adaptations: firstAdaptations },
+          { plan: plans.getState().plan, adaptations: plans.getState().adaptations },
+        ],
+        sessions: await db.sessions.toArray(),
+        measurements: await db.measurements.toArray(),
+      }),
+    );
+  }
 }
 
 main().catch((err) => {

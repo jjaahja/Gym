@@ -9,6 +9,7 @@ import { getExerciseById, getMuscle } from "@/lib/catalog";
 import { SET_TYPE_LABELS } from "@/lib/labels";
 import { getDb } from "@/lib/offline/db";
 import { sessionsSince } from "@/lib/offline/history";
+import { useSyncStatus } from "@/lib/offline/sync";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { muscleVolume, startOfWeek } from "@/lib/training/volume";
@@ -34,6 +35,17 @@ export function DashboardContent() {
 }
 
 function NoPlan() {
+  const loading = useSyncStatus((s) => s.firstPull === "pending" || s.pulling);
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="Dein Plan" subtitle="Muskelaufbau & Optik" />
+        <Card className="animate-pulse">
+          <p className="text-sm text-muted" role="status">Lade deine Daten …</p>
+        </Card>
+      </>
+    );
+  }
   return (
     <>
       <PageHeader title="Dein Plan" subtitle="Muskelaufbau & Optik" />

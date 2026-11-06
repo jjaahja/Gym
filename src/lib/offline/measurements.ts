@@ -1,9 +1,18 @@
+import { CATALOG_NAMESPACE, uuidV5 } from "@/lib/db/stable-id";
 import type { GymDB, Measurement } from "./db";
 import type { NewOutboxEntry } from "./outbox";
 
 // Körpermaße: lokal gespeichert (ein Eintrag pro Tag) und als body_measurements synchronisiert.
 
 export type MeasurementInput = Omit<Measurement, "id">;
+
+/**
+ * Stabile ID je Konto und Tag: Messen zwei Geräte offline am selben Tag, schreiben beide dieselbe Zeile
+ * (sonst verletzt der zweite Upload unique(user_id, measured_on) und hält die Outbox an).
+ */
+export function measurementId(userId: string, measuredOn: string): string {
+  return uuidV5(`body_measurement:${userId}:${measuredOn}`, CATALOG_NAMESPACE);
+}
 
 export const MEASURE_FIELDS = [
   { key: "bodyWeightKg", column: "body_weight_kg", label: "Körpergewicht", unit: "kg", max: 999.99, decimals: 2 },
@@ -59,7 +68,9 @@ export async function saveMeasurement(
   if (error) throw new RangeError(error);
   // Ein Eintrag pro Tag (unique(user_id, measured_on)) → bestehende ID weiterverwenden
   const existing = await db.measurements.where("measuredOn").equals(input.measuredOn).first();
-  const measurement: Measurement = { ...input, id: existing?.id ?? (options.uuid ?? (() => crypto.randomUUID()))() };
+  const id =
+    existing?.id ?? (options.userId ? measurementId(options.userId, input.measuredOn) : (options.uuid ?? (() => crypto.randomUUID()))());
+  const measurement: Measurement = { ...input, id };
   await db.measurements.put(measurement);
   if (options.userId) {
     options.sink({ table: "body_measurements", op: "upsert", rowId: measurement.id, payload: toRow(options.userId, measurement) });

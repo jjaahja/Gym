@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
 import { getDb } from "@/lib/offline/db";
-import { syncNow, useSyncStatus } from "@/lib/offline/sync";
+import { syncDevice } from "@/lib/offline/device-sync";
+import { useSyncStatus } from "@/lib/offline/sync";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
 import { workoutStore } from "@/stores/workout";
@@ -44,7 +46,7 @@ function StoreHydration() {
   return null;
 }
 
-/** Hält die Anzahl offener Änderungen aktuell und synchronisiert bei Netz, Fokus und alle 30 s. */
+/** Hält die Anzahl offener Änderungen aktuell und gleicht ab: beim Start, bei Netz, Fokus, alle 30 s und nach der Anmeldung. */
 function SyncManager() {
   useEffect(() => {
     const subscription = liveQuery(() => getDb().outbox.count()).subscribe({
@@ -52,7 +54,11 @@ function SyncManager() {
       error: (err) => console.error("Outbox nicht lesbar", err),
     });
 
-    const run = () => void syncNow();
+    const run = () => void syncDevice();
+    // Nach der Anmeldung sofort den Stand vom Server holen (neues Gerät)
+    const auth = getSupabaseBrowserClient()?.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") setTimeout(() => void syncDevice({ force: true }), 0);
+    });
     const onVisible = () => document.visibilityState === "visible" && run();
 
     run();
@@ -62,6 +68,7 @@ function SyncManager() {
 
     return () => {
       subscription.unsubscribe();
+      auth?.data.subscription.unsubscribe();
       window.removeEventListener("online", run);
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);

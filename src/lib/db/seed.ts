@@ -1,3 +1,4 @@
+import { EXERCISE_VIDEOS } from "@/data/catalog/videos";
 import { equipmentList, exercises, muscleGroups } from "@/lib/catalog";
 import { catalogId } from "@/lib/db/stable-id";
 import { guidelines, sources } from "@/lib/science";
@@ -68,12 +69,13 @@ export function buildSeedSql(): string {
       [
         "id", "slug", "name_de", "name_en", "description", "instructions", "common_mistakes", "cues",
         "mechanic", "movement_pattern", "laterality", "tracking_type", "difficulty", "resistance_profile",
-        "systemic_fatigue", "load_increment_kg",
+        "systemic_fatigue", "load_increment_kg", "video_url",
       ],
       exercises.map((e) => [
         e.id, e.slug, e.nameDe, e.nameEn, e.description, e.instructions, e.commonMistakes, e.cues,
         e.mechanic, e.movementPattern, e.laterality, e.trackingType, e.difficulty, e.resistanceProfile,
         e.systemicFatigue, e.loadIncrementKg,
+        EXERCISE_VIDEOS[e.slug] ? `https://www.youtube.com/watch?v=${EXERCISE_VIDEOS[e.slug].youtubeId}` : null,
       ]),
     ),
     "-- Muskel- und Equipment-Zuordnungen: neu aufbauen, damit entfernte Zuordnungen verschwinden",

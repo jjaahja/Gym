@@ -45,3 +45,15 @@ describe("Übungskatalog", () => {
     }
   });
 });
+
+describe("Ausführungsvideos", () => {
+  it("hat für jede Übung ein Video mit gültiger YouTube-ID – keine Doppelten, keine verwaisten Einträge", async () => {
+    const { EXERCISE_VIDEOS } = await import("@/data/catalog/videos");
+    const slugs = new Set(exercises.map((e) => e.slug));
+    expect(exercises.filter((e) => !EXERCISE_VIDEOS[e.slug]).map((e) => e.slug)).toEqual([]);
+    expect(Object.keys(EXERCISE_VIDEOS).filter((s) => !slugs.has(s))).toEqual([]);
+    const ids = Object.values(EXERCISE_VIDEOS).map((v) => v.youtubeId);
+    expect(ids.every((id) => /^[A-Za-z0-9_-]{11}$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

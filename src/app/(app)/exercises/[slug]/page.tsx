@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ExerciseVideo } from "@/components/exercise-video";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
@@ -107,10 +108,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
         <p className="mt-3 text-muted">{exercise.description}</p>
       </header>
 
-      {/* Platzhalter für Bild, Video oder GIF (exercises.image_url / video_url / gif_url) */}
-      <div className="flex aspect-video items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-sm text-muted">
-        Video zur Ausführung folgt
-      </div>
+      <ExerciseVideo slug={exercise.slug} exerciseName={exercise.nameDe} />
 
       <Card>
         <h2 className="text-lg font-semibold">Ausführung</h2>

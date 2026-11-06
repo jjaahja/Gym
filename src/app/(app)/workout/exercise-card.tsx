@@ -1,6 +1,8 @@
 "use client";
 
-import { SwapIcon } from "@/components/icons";
+import { ExerciseVideo, hasVideo } from "@/components/exercise-video";
+import { PlayIcon, SwapIcon } from "@/components/icons";
+import { Sheet } from "@/components/sheet";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { buttonStyles } from "@/components/ui";
@@ -122,6 +124,7 @@ export function ExerciseCard({
 
   const techniqueDone = sets.some((s) => TECHNIQUE_SET_TYPES.includes(s.setType));
   const [mode, setMode] = useState<"working" | "warmup" | "technique">("working");
+  const [videoOpen, setVideoOpen] = useState(false);
   const nextType: SetType = mode === "warmup" ? "warmup" : mode === "technique" && p.technique ? p.technique : "working";
 
   // Junk Volume: harte Sätze heute je Hauptmuskel gegen den Richtwert pro Einheit
@@ -158,14 +161,21 @@ export function ExerciseCard({
 
       {expanded && (
         <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
-          {(onSwap || substitutedFor) && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {substitutedFor ? (
-                <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                  Heute statt {substitutedFor.nameDe}
-                </span>
-              ) : (
-                <span />
+          {substitutedFor && (
+            <span className="inline-block rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+              Heute statt {substitutedFor.nameDe}
+            </span>
+          )}
+          {(onSwap || hasVideo(exercise.slug)) && (
+            <div className="flex flex-wrap gap-2">
+              {hasVideo(exercise.slug) && (
+                <button
+                  type="button"
+                  onClick={() => setVideoOpen(true)}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium"
+                >
+                  <PlayIcon className="size-4 text-accent" /> Ausführung
+                </button>
               )}
               {onSwap && (
                 <button
@@ -177,6 +187,29 @@ export function ExerciseCard({
                 </button>
               )}
             </div>
+          )}
+          {videoOpen && (
+            <Sheet open={videoOpen} onClose={() => setVideoOpen(false)} title={exercise.nameDe}>
+              <div className="space-y-4">
+                <ExerciseVideo slug={exercise.slug} exerciseName={exercise.nameDe} />
+                {exercise.cues.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold">Worauf achten</h3>
+                    <ul className="mt-1.5 space-y-1.5 text-sm">
+                      {exercise.cues.map((cue) => (
+                        <li key={cue} className="flex gap-2">
+                          <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+                          {cue}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <Link href={`/exercises/${exercise.slug}`} className="inline-flex min-h-10 items-center text-sm font-medium text-accent">
+                  Alle Details zur Übung →
+                </Link>
+              </div>
+            </Sheet>
           )}
           {/* Richtwerte inline */}
           <details className="group rounded-xl bg-accent-soft px-3 py-2 text-sm">

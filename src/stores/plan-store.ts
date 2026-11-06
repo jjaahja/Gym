@@ -17,7 +17,7 @@ import {
   type MuscleVolume,
   type PlannedExercise,
 } from "@/lib/training/plan-generator";
-import type { AdaptationProposal } from "@/lib/training/progression";
+import { buildSwapProposal, type AdaptationProposal } from "@/lib/training/progression";
 import type { Weekday } from "@/lib/training/schedule";
 
 // Aktiver Trainingsplan – lokal gespeichert (offline, Demo-Modus) und als DB-Zeilen synchronisiert.
@@ -122,6 +122,8 @@ export interface PlanState {
   rejectSuggestion(adaptationId: string): void;
   /** Mesozyklus abschließen: Volumen anpassen, Entscheidungen protokollieren, neuen Zyklus beginnen */
   completeMesocycle(decision: MesocycleDecision): AdaptationRecord[];
+  /** Übung im Plan dauerhaft ersetzen (vom Nutzer gewählt) – rückgängig über das Protokoll */
+  swapExercise(planExerciseId: string, replacementSlug: string): AdaptationRecord | null;
   /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
   setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
   /** Stand vom Server übernehmen (anderes Gerät) – erzeugt keine Outbox-Einträge */
@@ -629,6 +631,17 @@ export function createPlanStore(deps: PlanStoreDeps) {
             }
             emitPlan();
             return records;
+          },
+
+          swapExercise(planExerciseId, replacementSlug) {
+            const plan = get().plan;
+            const found = plan ? findPlanExercise(plan, planExerciseId) : null;
+            const current = found ? getExercise(found.exercise.exerciseSlug) : undefined;
+            const replacement = getExercise(replacementSlug);
+            if (!plan || !current || !replacement || current.slug === replacement.slug) return null;
+            const proposal = buildSwapProposal(current, replacement, "user_request");
+            const done = accept(record(plan, { ...proposal, status: "suggested" }, planExerciseId));
+            return done ? save(done) : null;
           },
 
           setWeekdays(weekdays) {

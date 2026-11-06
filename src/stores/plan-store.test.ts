@@ -344,3 +344,59 @@ describe("Wochentage im Plan", () => {
     expect(store.getState().plan!.days.every((d) => d.weekday === null)).toBe(true);
   });
 });
+
+describe("Übung tauschen", () => {
+  it("tauscht nur für heute: Ersatzübung geloggt, Planübung bekommt keine Laständerung", async () => {
+    const ctx = setup();
+    const db = new GymDB(`t-${crypto.randomUUID()}`, { indexedDB: new IDBFactory(), IDBKeyRange });
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const pe = plan.days[0].exercises[0];
+    const substitute = getExercise("machine-chest-press")!;
+    ctx.workout.getState().start({ userId: "user-1", planId: plan.id, planDayId: plan.days[0].id });
+    ctx.workout.getState().substitute(pe.id, substitute.id);
+    expect(ctx.workout.getState().session!.substitutions).toEqual({ [pe.id]: substitute.id });
+    const log = ctx.workout.getState().ensureExercise(substitute.id, pe.id);
+    for (let i = 0; i < 2; i++) ctx.workout.getState().logSet(log, { weightKg: 50, reps: 20, rir: 1 });
+    expect(() => ctx.workout.getState().substitute(pe.id, null)).toThrow(/schon Sätze/);
+    ctx.tick(3600_000);
+    const result = await completeWorkout({ db, workout: ctx.workout, plans: ctx.plans, sessionRpe: 7 });
+    expect(result.session.exercises[0]).toMatchObject({ exerciseId: substitute.id, planExerciseId: pe.id });
+    expect(result.adaptations).toEqual([]);
+    expect(ctx.plans.getState().plan!.days[0].exercises[0]).toMatchObject({ exerciseId: pe.exerciseId, targetLoadKg: null });
+  });
+
+  it("stellt einen leeren Eintrag auf die Ersatzübung um und kann zurückgetauscht werden", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const pe = plan.days[0].exercises[0];
+    ctx.workout.getState().start({ userId: "user-1", planId: plan.id, planDayId: plan.days[0].id });
+    const log = ctx.workout.getState().ensureExercise(pe.exerciseId, pe.id);
+    const set = ctx.workout.getState().logSet(log, { weightKg: 50, reps: 10, rir: 2 });
+    ctx.workout.getState().removeSet(log, set);
+    ctx.entries.length = 0;
+    const substitute = getExercise("machine-chest-press")!;
+    ctx.workout.getState().substitute(pe.id, substitute.id);
+    expect(ctx.workout.getState().session!.exercises[0].exerciseId).toBe(substitute.id);
+    expect(ctx.entries.at(-1)).toMatchObject({ table: "exercise_logs", payload: { exercise_id: substitute.id, plan_exercise_id: pe.id } });
+    ctx.workout.getState().substitute(pe.id, null);
+    expect(ctx.workout.getState().session!.substitutions).toEqual({});
+  });
+
+  it("tauscht dauerhaft im Plan – mit eigener Vorgabe, Protokoll und Rückgängig", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const pe = plan.days.flatMap((d) => d.exercises).find((e) => e.exerciseSlug === "barbell-bench-press")!;
+    ctx.plans.getState().setTargetLoad(pe.id, 80);
+    const record = ctx.plans.getState().swapExercise(pe.id, "dumbbell-bench-press")!;
+    expect(record).toMatchObject({ type: "swap_exercise", reason: "user_request", status: "accepted" });
+    expect(record.explanation).toMatch(/Im Training getauscht: Bankdrücken/);
+    const swapped = ctx.plans.getState().plan!.days.flatMap((d) => d.exercises).find((e) => e.id === pe.id)!;
+    expect(swapped).toMatchObject({ exerciseSlug: "dumbbell-bench-press", targetLoadKg: null, sets: pe.sets });
+    expect(ctx.plans.getState().swapExercise(pe.id, "dumbbell-bench-press")).toBeNull(); // gleiche Übung
+    ctx.plans.getState().revertAdaptation(record.id);
+    expect(ctx.plans.getState().plan!.days.flatMap((d) => d.exercises).find((e) => e.id === pe.id)).toMatchObject({
+      exerciseSlug: "barbell-bench-press",
+      targetLoadKg: 80,
+    });
+  });
+});

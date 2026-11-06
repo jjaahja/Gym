@@ -39,6 +39,8 @@ export interface ActiveSession {
   planWeek?: number | null;
   /** Training in einer Deload-Woche */
   deload?: boolean;
+  /** Nur heute getauschte Planübungen: planExerciseId → exerciseId */
+  substitutions?: Record<string, string>;
   startedAt: string;
   exercises: LoggedExercise[];
 }
@@ -64,6 +66,11 @@ export interface WorkoutState {
   addExercise(exerciseId: string, planExerciseId?: string | null): string;
   /** Liefert den Log der Übung – legt ihn beim ersten Satz an (Planübungen ohne Satz erzeugen keine leeren Einträge). */
   ensureExercise(exerciseId: string, planExerciseId?: string | null): string;
+  /**
+   * Planübung nur für dieses Training ersetzen (null = Original). Nur solange dafür noch kein Satz
+   * eingetragen ist – sonst würden Sätze unterschiedlicher Übungen vermischt.
+   */
+  substitute(planExerciseId: string, exerciseId: string | null): void;
   logSet(exerciseLogId: string, input: SetInput): string;
   updateSet(exerciseLogId: string, setId: string, input: Partial<SetInput>): void;
   removeSet(exerciseLogId: string, setId: string): void;
@@ -232,6 +239,23 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               payload: exerciseRow(next.id, exercise),
             });
             return exercise.id;
+          },
+
+          substitute(planExerciseId, exerciseId) {
+            const session = requireSession();
+            const log = session.exercises.find((e) => e.planExerciseId === planExerciseId);
+            if (log && log.sets.length > 0) throw new Error("Für diese Übung sind schon Sätze eingetragen");
+            const substitutions = { ...(session.substitutions ?? {}) };
+            if (exerciseId) substitutions[planExerciseId] = exerciseId;
+            else delete substitutions[planExerciseId];
+            let next: ActiveSession = { ...session, substitutions };
+            if (log && exerciseId && log.exerciseId !== exerciseId) {
+              // leerer Eintrag (z. B. alle Sätze gelöscht) → auf die neue Übung umstellen
+              const updated = { ...log, exerciseId };
+              next = replaceExercise(next, updated);
+              emit(next, { table: "exercise_logs", op: "upsert", rowId: updated.id, payload: exerciseRow(next.id, updated) });
+            }
+            set({ session: next });
           },
 
           ensureExercise(exerciseId, planExerciseId = null) {

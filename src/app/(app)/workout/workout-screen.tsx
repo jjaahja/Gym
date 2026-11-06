@@ -13,7 +13,9 @@ import { completeWorkout } from "@/lib/workout/complete";
 import { startOptions } from "@/lib/workout/start";
 import { dayForWeekday, hasSchedule, isoWeekday, weekdayShort } from "@/lib/training/schedule";
 import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
-import { deloadPrescription } from "@/stores/plan-store";
+import { deloadPrescription, type StoredPlanExercise } from "@/stores/plan-store";
+import { allowsTechnique, prescribe, techniqueFor } from "@/lib/training/plan-generator";
+import { SwapSheet } from "./swap-sheet";
 import type { StoredPlan } from "@/stores/plan-store";
 import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
 import type { ActiveSession } from "@/stores/workout-store";
@@ -125,18 +127,38 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
 
   // Planübungen des Tages + spontan hinzugefügte Übungen
   const items = useMemo(() => {
-    const planned = (day?.exercises ?? []).map((pe) => ({
-      key: pe.id,
-      exercise: getExerciseById(pe.exerciseId)!,
-      // Deload-Woche: halbe Sätze, RIR 3–4, keine Intensitätstechnik
-      planned: session.deload ? deloadPrescription(pe) : pe,
-      log: session.exercises.find((e) => e.planExerciseId === pe.id) ?? null,
-    }));
+    const planned = (day?.exercises ?? []).map((pe) => {
+      const original = getExerciseById(pe.exerciseId)!;
+      const substituteId = session.substitutions?.[pe.id];
+      const substitute = substituteId ? getExerciseById(substituteId) : undefined;
+      // Heutiger Ersatz: Vorgabe aus den Richtwerten der Ersatzübung, Satzzahl wie geplant, Gewicht neu
+      const prescription: StoredPlanExercise = substitute
+        ? {
+            ...prescribe(substitute, goal, experience, {
+              orderIndex: pe.orderIndex,
+              sets: pe.sets,
+              technique: pe.lastSetTechnique && allowsTechnique(substitute, goal, experience) ? techniqueFor(substitute) : null,
+            }),
+            id: pe.id,
+            targetLoadKg: null,
+          }
+        : pe;
+      return {
+        key: pe.id,
+        exercise: substitute ?? original,
+        original,
+        // Deload-Woche: halbe Sätze, RIR 3–4, keine Intensitätstechnik
+        planned: session.deload ? deloadPrescription(prescription) : prescription,
+        log: session.exercises.find((e) => e.planExerciseId === pe.id) ?? null,
+      };
+    });
     const extra = session.exercises
       .filter((e) => !e.planExerciseId || !day?.exercises.some((pe) => pe.id === e.planExerciseId))
-      .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, planned: null, log: e }));
+      .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, original: null, planned: null, log: e }));
     return [...planned, ...extra].filter((i) => i.exercise);
-  }, [day, session.exercises, session.deload]);
+  }, [day, session.exercises, session.deload, session.substitutions, goal, experience]);
+  const [swapKey, setSwapKey] = useState<string | null>(null);
+  const swapItem = items.find((i) => i.key === swapKey && i.original);
 
   const firstOpen = items.findIndex((i) => (i.log?.sets.filter((s) => s.setType === "working").length ?? 0) < (i.planned?.sets ?? 3));
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -191,6 +213,8 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           onToggle={() => setExpandedKey(activeKey === item.key ? "" : item.key)}
           onActivity={() => setExpandedKey(item.key)}
           onNext={nextOpen ? () => setExpandedKey(nextOpen.key) : undefined}
+          onSwap={item.original ? () => setSwapKey(item.key) : undefined}
+          substitutedFor={item.original && item.original.id !== item.exercise.id ? item.original : null}
         />
         );
       })}
@@ -198,6 +222,22 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
       <button type="button" className={`${buttonStyles.secondary} w-full`} onClick={() => setAddOpen(true)}>
         + Übung hinzufügen
       </button>
+
+      {swapItem && swapItem.original && (
+        <SwapSheet
+          key={`${swapItem.key}-${swapItem.exercise.id}`}
+          open
+          onClose={() => setSwapKey(null)}
+          planExerciseId={swapItem.key}
+          original={swapItem.original}
+          current={swapItem.exercise}
+          inSession={new Set(items.filter((i) => i.key !== swapItem.key).map((i) => i.exercise.slug))}
+          goal={goal}
+          experience={experience}
+          equipment={plan?.assessment.equipment ?? []}
+          canSwap={(swapItem.log?.sets.length ?? 0) === 0}
+        />
+      )}
 
       <RestTimer />
       <AddExerciseSheet open={addOpen} onClose={() => setAddOpen(false)} plan={plan} onAdded={(key) => setExpandedKey(key)} />

@@ -37,6 +37,8 @@ export async function completeWorkout(deps: {
     const found = findPlanExercise(plan, logged.planExerciseId);
     const exercise = getExerciseById(logged.exerciseId);
     if (!found || !exercise) continue;
+    // Heute eine Ersatzübung gemacht → Gewicht der Planübung nicht daraus ableiten
+    if (found.exercise.exerciseId !== logged.exerciseId) continue;
 
     // Körpergewicht/Band ohne Zusatzlast: Steigerung über Wiederholungen bzw. Variante, nicht über kg
     const usedLoad = logged.sets.some((s) => (s.weightKg ?? 0) > 0);

@@ -18,6 +18,7 @@ import {
   type LoggedSetLike,
   type Prescription,
   type SessionPerformance,
+  rankAlternatives,
 } from "./progression";
 
 const p: Prescription = { repsMin: 6, repsMax: 10, rirMin: 1, rirMax: 3, targetLoadKg: 80, loadIncrementKg: 2.5 };
@@ -187,5 +188,49 @@ describe("Übungswechsel", () => {
     const r = buildSwapProposal(getExercise("barbell-back-squat")!, getExercise("leg-press")!, "stimulus_feedback");
     expect(r).toMatchObject({ type: "swap_exercise", status: "suggested", guidelineKey: "exercise_variation.planned" });
     expect(r.explanation).toContain("Beinpresse");
+  });
+});
+
+describe("Alternativen zum Tauschen", () => {
+  const gym = [...EQUIPMENT_PRESETS.gym];
+
+  it("schlägt für Bankdrücken Übungen mit denselben Zielmuskeln vor, ähnliche Bewegung zuerst", () => {
+    const bench = getExercise("barbell-bench-press")!;
+    const list = rankAlternatives(bench, { goal: "hypertrophy", experience: "intermediate", equipment: gym });
+    expect(list.length).toBe(6);
+    expect(list.every((a) => a.shared.includes("chest"))).toBe(true);
+    expect(list[0].samePattern).toBe(true);
+    expect(list.map((a) => a.exercise.slug)).not.toContain("barbell-bench-press");
+    expect(list[0].reason).toMatch(/Zielmuskeln|Trifft/);
+    // absteigend sortiert
+    expect(list.every((a, i) => i === 0 || list[i - 1].score >= a.score)).toBe(true);
+  });
+
+  it("berücksichtigt Ausstattung, Erfahrung und schon geplante Übungen", () => {
+    const bench = getExercise("barbell-bench-press")!;
+    const home = rankAlternatives(bench, { goal: "hypertrophy", experience: "intermediate", equipment: [...EQUIPMENT_PRESETS.home_minimal] });
+    expect(home.every((a) => a.exercise.equipment.every((e) => EQUIPMENT_PRESETS.home_minimal.includes(e)))).toBe(true);
+    const first = rankAlternatives(bench, { goal: "hypertrophy", experience: "intermediate", equipment: gym })[0];
+    const without = rankAlternatives(bench, { goal: "hypertrophy", experience: "intermediate", equipment: gym, exclude: new Set([first.exercise.slug]) });
+    expect(without.map((a) => a.exercise.slug)).not.toContain(first.exercise.slug);
+    const beginner = rankAlternatives(bench, { goal: "hypertrophy", experience: "beginner", equipment: gym, limit: 50 });
+    expect(beginner.every((a) => a.exercise.difficulty === "beginner")).toBe(true);
+  });
+
+  it("bevorzugt Übungen mit gutem Pump und meidet solche mit Gelenkbeschwerden", () => {
+    const fly = getExercise("cable-fly")!;
+    const base = rankAlternatives(fly, { goal: "hypertrophy", experience: "intermediate", equipment: gym, limit: 50 });
+    const last = base.at(-1)!.exercise.slug;
+    const boosted = rankAlternatives(fly, {
+      goal: "hypertrophy", experience: "intermediate", equipment: gym, limit: 50,
+      feedback: new Map([[last, { avgPump: 3, avgJointDiscomfort: 0 }]]),
+    });
+    expect(boosted.findIndex((a) => a.exercise.slug === last)).toBeLessThan(base.length - 1);
+    const top = base[0].exercise.slug;
+    const hurt = rankAlternatives(fly, {
+      goal: "hypertrophy", experience: "intermediate", equipment: gym, limit: 50,
+      feedback: new Map([[top, { avgPump: 0, avgJointDiscomfort: 3 }]]),
+    });
+    expect(hurt[0].exercise.slug).not.toBe(top);
   });
 });

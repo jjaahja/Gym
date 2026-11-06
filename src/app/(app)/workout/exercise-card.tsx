@@ -1,5 +1,6 @@
 "use client";
 
+import { SwapIcon } from "@/components/icons";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { buttonStyles } from "@/components/ui";
@@ -64,6 +65,8 @@ export function ExerciseCard({
   onToggle,
   onActivity,
   onNext,
+  onSwap,
+  substitutedFor = null,
 }: {
   exercise: Exercise;
   planned: StoredPlanExercise | null;
@@ -78,6 +81,10 @@ export function ExerciseCard({
   onActivity: () => void;
   /** Zur nächsten offenen Übung springen */
   onNext?: () => void;
+  /** Übung tauschen (nur Planübungen) */
+  onSwap?: () => void;
+  /** heute ersetzt – Originalübung laut Plan */
+  substitutedFor?: Exercise | null;
 }) {
   const { unitSystem: unit, effortScale: scale } = useSettings();
   const guidelines = resolveExerciseGuidelines(exercise, goal, experience);
@@ -151,6 +158,26 @@ export function ExerciseCard({
 
       {expanded && (
         <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
+          {(onSwap || substitutedFor) && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {substitutedFor ? (
+                <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                  Heute statt {substitutedFor.nameDe}
+                </span>
+              ) : (
+                <span />
+              )}
+              {onSwap && (
+                <button
+                  type="button"
+                  onClick={onSwap}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium"
+                >
+                  <SwapIcon className="size-4" /> Übung tauschen
+                </button>
+              )}
+            </div>
+          )}
           {/* Richtwerte inline */}
           <details className="group rounded-xl bg-accent-soft px-3 py-2 text-sm">
             <summary className="flex cursor-pointer list-none flex-wrap gap-x-3 gap-y-1">

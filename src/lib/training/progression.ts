@@ -391,7 +391,9 @@ export function buildSwapProposal(current: Exercise, replacement: Exercise, reas
   const why =
     reason === "stimulus_feedback"
       ? `${current.nameDe} hat zweimal in Folge Gelenkbeschwerden verursacht`
-      : `Bei ${current.nameDe} gab es über mehrere Einheiten keinen neuen Bestwert`;
+      : reason === "user_request"
+        ? `Im Training getauscht: ${current.nameDe} → ${replacement.nameDe}`
+        : `Bei ${current.nameDe} gab es über mehrere Einheiten keinen neuen Bestwert`;
   return {
     type: "swap_exercise",
     reason,
@@ -399,6 +401,67 @@ export function buildSwapProposal(current: Exercise, replacement: Exercise, reas
     before: { exercise_id: current.id, exercise_slug: current.slug },
     after: { exercise_id: replacement.id, exercise_slug: replacement.slug },
     guidelineKey: getGuideline("exercise_variation.planned").key,
-    explanation: `${why}. Vorschlag: ${replacement.nameDe} – gleiche Muskeln, anderer Reiz.`,
+    explanation:
+      reason === "user_request" ? `${why}. Vorgabe (Wiederholungen, RIR, Pause) aus den Richtwerten der neuen Übung.` : `${why}. Vorschlag: ${replacement.nameDe} – gleiche Muskeln, anderer Reiz.`,
   };
+}
+
+// ─────────────────────────── 7) Alternativen zum Tauschen im Training ───────────────────────────
+
+export interface Alternative {
+  exercise: Exercise;
+  score: number;
+  /** gemeinsame Zielmuskeln (primär) */
+  shared: MuscleSlug[];
+  samePattern: boolean;
+  reason: string;
+}
+
+export interface AlternativeContext {
+  goal: TrainingGoal;
+  experience: ExperienceLevel;
+  equipment: readonly EquipmentSlug[];
+  /** schon im heutigen Training oder sonst ausgeschlossen (Slugs) */
+  exclude?: ReadonlySet<string>;
+  feedback?: ReadonlyMap<string, ExerciseFeedback>;
+  limit?: number;
+  muscleName?: (m: MuscleSlug) => string;
+}
+
+/**
+ * Sinnvolle Ersatzübungen, beste zuerst: möglichst dieselben Zielmuskeln (Jaccard der Primärmuskeln),
+ * gleiches Bewegungsmuster, machbar mit der Ausstattung. Persönliches Feedback (Pump, Gelenke) fließt ein.
+ */
+export function rankAlternatives(current: Exercise, ctx: AlternativeContext): Alternative[] {
+  const target = new Set(primaryMuscles(current));
+  const secondary = new Set(current.muscles.filter((m) => m.role !== "primary").map((m) => m.muscle));
+  const name = ctx.muscleName ?? ((m: MuscleSlug) => m);
+  const results: Alternative[] = [];
+  for (const e of catalog) {
+    if (e.slug === current.slug || ctx.exclude?.has(e.slug) || !isExerciseAvailable(e, ctx.equipment, ctx.experience)) continue;
+    const primary = primaryMuscles(e);
+    const shared = primary.filter((m) => target.has(m));
+    if (shared.length === 0) continue;
+    const union = new Set([...primary, ...target]).size;
+    const samePattern = e.movementPattern === current.movementPattern;
+    const fb = ctx.feedback?.get(e.slug);
+    let score = (10 * shared.length) / union;
+    if (samePattern) score += 5;
+    if (e.mechanic === current.mechanic) score += 1.5;
+    if (ctx.goal === "hypertrophy" && e.resistanceProfile === "lengthened") score += 2;
+    score += 0.5 * e.muscles.filter((m) => m.role !== "primary" && secondary.has(m.muscle)).length;
+    if (fb?.avgPump != null) score += fb.avgPump * 1.5;
+    if (fb?.avgJointDiscomfort != null) score -= fb.avgJointDiscomfort * 4;
+    score -= 0.3 * Math.abs(e.systemicFatigue - current.systemicFatigue);
+
+    const missing = [...target].filter((m) => !shared.includes(m));
+    const parts = [
+      missing.length === 0 ? `Gleiche Zielmuskeln: ${shared.map(name).join(", ")}` : `Trifft ${shared.map(name).join(", ")}`,
+      samePattern ? "gleiche Bewegung" : null,
+      ctx.goal === "hypertrophy" && e.resistanceProfile === "lengthened" ? "Dehnungsfokus" : null,
+      fb?.avgPump != null && fb.avgPump >= 2 ? "guter Pump bei dir" : null,
+    ].filter(Boolean);
+    results.push({ exercise: e, score, shared, samePattern, reason: parts.join(" · ") });
+  }
+  return results.sort((a, b) => b.score - a.score || a.exercise.slug.localeCompare(b.exercise.slug)).slice(0, ctx.limit ?? 6);
 }

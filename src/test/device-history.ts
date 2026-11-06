@@ -52,7 +52,7 @@ export async function deviceHistory() {
   const workout = createWorkoutStore(deps);
   const db = new GymDB(`r-${crypto.randomUUID()}`, { indexedDB: new IDBFactory(), IDBKeyRange });
 
-  plans.getState().createPlan({ userId: USER, assessment, generated: generatePlan(assessment) });
+  plans.getState().createPlan({ userId: USER, assessment, generated: generatePlan(assessment), weekdays: [1, 2, 4, 5] });
   const plan = plans.getState().plan!;
   const day = plan.days[0];
 

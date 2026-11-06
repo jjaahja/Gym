@@ -13,6 +13,8 @@ import { GOAL_LABELS, SET_TYPE_LABELS } from "@/lib/labels";
 import { getGuideline, resolveMuscleGuidelines } from "@/lib/science";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { generatePlan, previewSplit, SPLIT_LABELS } from "@/lib/training/plan-generator";
+import { defaultWeekdays, recoveryWarnings, weekdayShort, type Weekday } from "@/lib/training/schedule";
+import { WeekdayPicker } from "@/components/weekday-picker";
 import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
 import type { AssessmentInput } from "@/stores/plan-store";
 
@@ -135,7 +137,7 @@ function ExperienceStep({ draft, update }: StepProps) {
 
 const DURATIONS = [30, 45, 60, 75, 90, 120];
 
-function TimeStep({ draft, update }: StepProps) {
+function TimeStep({ draft, update, weekdays, setWeekdays }: StepProps & { weekdays: Weekday[]; setWeekdays: (w: Weekday[]) => void }) {
   const split = previewSplit(draft.daysPerWeek, draft.preferredSplit);
   return (
     <div className="space-y-4">
@@ -158,6 +160,12 @@ function TimeStep({ draft, update }: StepProps) {
           ))}
         </div>
       </fieldset>
+      <WeekdayPicker
+        label="An welchen Tagen?"
+        value={weekdays}
+        count={Math.min(draft.daysPerWeek, 6)}
+        onChange={setWeekdays}
+      />
       <fieldset>
         <legend className="mb-2 text-sm font-medium">Minuten pro Einheit</legend>
         <div className="flex flex-wrap gap-2">
@@ -309,24 +317,33 @@ function DetailsStep({ draft, update }: StepProps) {
   );
 }
 
-function PreviewStep({ draft }: { draft: AssessmentInput }) {
+function PreviewStep({ draft, weekdays }: { draft: AssessmentInput; weekdays: Weekday[] }) {
   const plan = useMemo(() => generatePlan(draft), [draft]);
+  const scheduled = plan.days.map((d, i) => ({ ...d, weekday: weekdays[i] ?? null }));
+  const recovery = recoveryWarnings(
+    scheduled.map((d) => ({ ...d, exercises: d.exercises.map((e) => ({ exerciseId: getExercise(e.exerciseSlug)!.id, sets: e.sets })) })) as never,
+  );
   return (
     <div className="space-y-4">
       <StepHeader title={plan.name} subtitle={`${plan.days.length} Tage pro Woche · Mesozyklus ${plan.mesocycleWeeks} Wochen`} />
 
-      {plan.warnings.length > 0 && (
+      {plan.warnings.length + recovery.length > 0 && (
         <div className="space-y-2 rounded-xl bg-warning-bg px-4 py-3 text-sm text-warning-fg" role="status">
-          {plan.warnings.map((w) => (
+          {[...plan.warnings, ...recovery].map((w) => (
             <p key={w}>{w}</p>
           ))}
         </div>
       )}
 
-      {plan.days.map((day) => (
+      {scheduled.map((day) => (
         <Card key={day.dayIndex}>
           <div className="flex items-baseline justify-between">
-            <h3 className="font-semibold">{day.name}</h3>
+            <h3 className="flex items-baseline gap-2 font-semibold">
+              {day.weekday && (
+                <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-xs font-bold text-accent">{weekdayShort(day.weekday)}</span>
+              )}
+              {day.name}
+            </h3>
             <span className="text-sm text-muted">ca. {day.estimatedMinutes} min</span>
           </div>
           <ul className="mt-2 space-y-1.5 text-sm">
@@ -370,10 +387,19 @@ function Wizard() {
   const router = useRouter();
   const existing = usePlan((s) => s.plan);
   const [draft, setDraft] = useState<AssessmentInput>(() => existing?.assessment ?? DEFAULT_DRAFT);
+  const [weekdays, setWeekdays] = useState<Weekday[]>(() => {
+    const current = existing?.days.map((d) => d.weekday).filter((w): w is Weekday => w != null) ?? [];
+    const count = Math.min((existing?.assessment ?? DEFAULT_DRAFT).daysPerWeek, 6);
+    return current.length === count ? [...current].sort((a, b) => a - b) : defaultWeekdays(count);
+  });
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const update = (patch: Partial<AssessmentInput>) => setDraft((d) => ({ ...d, ...patch }));
+  const update = (patch: Partial<AssessmentInput>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    if (patch.daysPerWeek !== undefined) setWeekdays(defaultWeekdays(patch.daysPerWeek));
+  };
+  const weekdaysComplete = weekdays.length === Math.min(draft.daysPerWeek, 6);
   const isLast = step === STEPS.length - 1;
 
   async function accept() {
@@ -385,6 +411,7 @@ function Wizard() {
         assessment: draft,
         generated,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        weekdays,
       });
       router.push("/dashboard");
     } finally {
@@ -405,11 +432,11 @@ function Wizard() {
 
       {step === 0 && <GoalStep draft={draft} update={update} />}
       {step === 1 && <ExperienceStep draft={draft} update={update} />}
-      {step === 2 && <TimeStep draft={draft} update={update} />}
+      {step === 2 && <TimeStep draft={draft} update={update} weekdays={weekdays} setWeekdays={setWeekdays} />}
       {step === 3 && <EquipmentStep draft={draft} update={update} />}
       {step === 4 && <FocusStep draft={draft} update={update} />}
       {step === 5 && <DetailsStep draft={draft} update={update} />}
-      {step === 6 && <PreviewStep draft={draft} />}
+      {step === 6 && <PreviewStep draft={draft} weekdays={weekdays} />}
 
       <div className="grid grid-cols-2 gap-3">
         <button type="button" className={buttonStyles.secondary} onClick={() => setStep((s) => s - 1)} disabled={step === 0}>
@@ -420,7 +447,12 @@ function Wizard() {
             {existing ? "Neu starten" : "Übernehmen"}
           </button>
         ) : (
-          <button type="button" className={buttonStyles.primary} onClick={() => setStep((s) => s + 1)}>
+          <button
+            type="button"
+            className={buttonStyles.primary}
+            onClick={() => setStep((s) => s + 1)}
+            disabled={step === 2 && !weekdaysComplete}
+          >
             {step === STEPS.length - 2 ? "Plan erstellen" : "Weiter"}
           </button>
         )}

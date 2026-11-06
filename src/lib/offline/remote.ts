@@ -18,6 +18,7 @@ import type {
 import { catalogId } from "@/lib/db/stable-id";
 import { resolveExerciseGuidelines } from "@/lib/science";
 import type { DayType, MuscleVolume } from "@/lib/training/plan-generator";
+import type { Weekday } from "@/lib/training/schedule";
 import { withPlannedVolume, type AdaptationRecord, type StoredPlan, type StoredPlanExercise } from "@/stores/plan-store";
 import type { CompletedSession, Measurement } from "./db";
 import { MEASURE_FIELDS } from "./measurements";
@@ -48,6 +49,7 @@ export interface RemotePlanDay {
   day_index: number;
   name: string;
   day_type: DayType | null;
+  weekday: number | null;
   plan_exercises: RemotePlanExercise[];
 }
 
@@ -240,6 +242,7 @@ export function planFromRemote(
         dayIndex: d.day_index,
         name: d.name,
         type: d.day_type ?? "full_a",
+        weekday: (d.weekday as Weekday | null) ?? null,
         estimatedMinutes: 0,
         exercises: [...d.plan_exercises]
           .sort((a, b) => a.order_index - b.order_index)

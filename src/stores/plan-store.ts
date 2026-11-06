@@ -18,6 +18,7 @@ import {
   type PlannedExercise,
 } from "@/lib/training/plan-generator";
 import type { AdaptationProposal } from "@/lib/training/progression";
+import type { Weekday } from "@/lib/training/schedule";
 
 // Aktiver Trainingsplan – lokal gespeichert (offline, Demo-Modus) und als DB-Zeilen synchronisiert.
 
@@ -43,6 +44,8 @@ export interface StoredPlanDay {
   dayIndex: number;
   name: string;
   type: DayType;
+  /** Fester Wochentag (1 = Montag … 7 = Sonntag); null = ohne festen Tag (ältere Pläne) */
+  weekday: Weekday | null;
   estimatedMinutes: number;
   exercises: StoredPlanExercise[];
 }
@@ -103,6 +106,8 @@ export interface PlanState {
     assessment: AssessmentInput;
     generated: GeneratedPlan;
     timezone?: string;
+    /** Trainings-Wochentage, werden den Tagen der Reihe nach zugeordnet */
+    weekdays?: readonly Weekday[];
   }): StoredPlan;
   advanceDay(completedDayIndex: number): void;
   /** Merkt sich das zuletzt genutzte Gewicht ohne Anpassungsprotokoll */
@@ -117,6 +122,8 @@ export interface PlanState {
   rejectSuggestion(adaptationId: string): void;
   /** Mesozyklus abschließen: Volumen anpassen, Entscheidungen protokollieren, neuen Zyklus beginnen */
   completeMesocycle(decision: MesocycleDecision): AdaptationRecord[];
+  /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
+  setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
   /** Stand vom Server übernehmen (anderes Gerät) – erzeugt keine Outbox-Einträge */
   replaceFromServer(state: { plan: StoredPlan | null; adaptations: AdaptationRecord[] }): void;
   clear(): void;
@@ -164,7 +171,7 @@ export function planRow(plan: StoredPlan, status: PlanStatus) {
 }
 
 export function planDayRow(planId: string, day: StoredPlanDay) {
-  return { id: day.id, plan_id: planId, day_index: day.dayIndex, name: day.name, weekday: null, day_type: day.type };
+  return { id: day.id, plan_id: planId, day_index: day.dayIndex, name: day.name, weekday: day.weekday, day_type: day.type };
 }
 
 export function assessmentRow(plan: StoredPlan) {
@@ -441,7 +448,11 @@ export function createPlanStore(deps: PlanStoreDeps) {
           plan: null,
           adaptations: [],
 
-          createPlan({ userId, assessment: input, generated, timezone }) {
+          createPlan({ userId, assessment: input, generated, timezone, weekdays }) {
+            const schedule =
+              weekdays && weekdays.length === generated.days.length && new Set(weekdays).size === weekdays.length
+                ? [...weekdays].sort((a, b) => a - b)
+                : null;
             const previous = get().plan;
             // Ausstattung in Katalog-Reihenfolge – so wie sie vom Server zurückkommt
             const chosen = new Set(input.equipment);
@@ -473,6 +484,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
                 dayIndex: d.dayIndex,
                 name: d.name,
                 type: d.type,
+                weekday: schedule ? schedule[d.dayIndex] : null,
                 estimatedMinutes: d.estimatedMinutes,
                 exercises: d.exercises.map((e) => ({ ...e, id: uuid(), targetLoadKg: null })),
               })),
@@ -619,6 +631,18 @@ export function createPlanStore(deps: PlanStoreDeps) {
             return records;
           },
 
+          setWeekdays(weekdays) {
+            const plan = get().plan;
+            if (!plan) return;
+            const next = plan.days.map((d) => (d.id in weekdays ? { ...d, weekday: weekdays[d.id] ?? null } : d));
+            const used = next.map((d) => d.weekday).filter((w) => w != null);
+            if (new Set(used).size !== used.length) throw new RangeError("Jeder Wochentag nur einmal");
+            const updated = { ...plan, days: next };
+            set({ plan: updated });
+            for (const day of next)
+              if (day.id in weekdays) emit(updated, { table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(updated.id, day) });
+          },
+
           replaceFromServer({ plan, adaptations }) {
             set({ plan, adaptations });
           },
@@ -630,10 +654,14 @@ export function createPlanStore(deps: PlanStoreDeps) {
       },
       {
         name: "gym-active-plan",
-        version: 2,
+        version: 3,
         // v1 → v2: Mesozyklus- und Deload-Felder
         migrate: (persisted, version) => {
           const state = persisted as { plan: (Partial<StoredPlan> & StoredPlan) | null; adaptations: AdaptationRecord[] };
+          // v2 → v3: Wochentage (ältere Pläne ohne festen Tag)
+          if (version < 3 && state.plan) {
+            state.plan = { ...state.plan, days: state.plan.days.map((d) => ({ ...d, weekday: d.weekday ?? null })) };
+          }
           if (version < 2 && state.plan) {
             state.plan = {
               ...state.plan,

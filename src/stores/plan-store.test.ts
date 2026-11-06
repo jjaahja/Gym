@@ -315,3 +315,32 @@ describe("Training in der Deload-Woche", () => {
     expect(ctx.plans.getState().plan!.nextDayIndex).toBe(1);
   });
 });
+
+describe("Wochentage im Plan", () => {
+  it("ändert Wochentage, synchronisiert die Tage und verhindert doppelte Tage", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated, weekdays: [1, 2, 4, 5] });
+    expect(ctx.entries.find((e) => e.table === "plan_days")!.payload).toMatchObject({ weekday: 1, day_type: "upper" });
+    ctx.entries.length = 0;
+    ctx.plans.getState().setWeekdays({ [plan.days[3].id]: 6 });
+    expect(ctx.plans.getState().plan!.days.map((d) => d.weekday)).toEqual([1, 2, 4, 6]);
+    expect(ctx.entries).toEqual([
+      expect.objectContaining({ table: "plan_days", op: "upsert", rowId: plan.days[3].id, payload: expect.objectContaining({ weekday: 6 }) }),
+    ]);
+    expect(() => ctx.plans.getState().setWeekdays({ [plan.days[0].id]: 2 })).toThrow(RangeError);
+  });
+
+  it("migriert gespeicherte Pläne von Version 2 (ohne Wochentage)", async () => {
+    const storage = memory();
+    const { generated } = setup();
+    const v2Plan = {
+      ...generated, id: "p2", startedAt: "2026-10-01T08:00:00.000Z", cycleStartedAt: "2026-10-01T08:00:00.000Z",
+      completedMesocycles: 0, deloadWeekStart: null, lastDeloadAt: null, volume: [],
+      days: generated.days.map((d, i) => ({ ...d, id: `d${i}`, exercises: [] })),
+    };
+    storage.setItem("gym-active-plan", JSON.stringify({ state: { plan: v2Plan, adaptations: [] }, version: 2 }));
+    const store = createPlanStore({ sink: () => {}, storage: () => storage });
+    await store.persist.rehydrate();
+    expect(store.getState().plan!.days.every((d) => d.weekday === null)).toBe(true);
+  });
+});

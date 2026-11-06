@@ -6,8 +6,9 @@ import { isSupabaseConfigured, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/
 // Läuft vor jeder Seite: erneuert die Supabase-Session und leitet nicht angemeldete
 // Nutzer zum Login. Die eigentliche Datensicherheit liegt in der DB (Row Level Security).
 
+// /datenschutz: Health Connect verlinkt die Seite ohne Anmeldung
 // /api/calendar: Kalender-Abo – Kalender-Apps senden keine Anmeldung, der geheime Token im Link schützt
-const PUBLIC_PATHS = ["/login", "/auth", "/offline", "/api/calendar"];
+const PUBLIC_PATHS = ["/login", "/auth", "/offline", "/datenschutz", "/api/calendar"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

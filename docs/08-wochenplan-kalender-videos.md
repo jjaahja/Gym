@@ -91,10 +91,12 @@ die Warteschlange (einzeln geschrieben, der Rest ging beim Neuladen verloren). B
 | **Withings** (Waage) | ✅ ja | mittel | kostenlose Withings-Entwickler-App (Client-ID/Secret). OAuth 2.0, Daten über `getmeas` (Gewicht, Fettanteil, Fett-/Magermasse). Access-Token ca. 3 h, Refresh-Token ca. 12 Monate gültig → Server speichert Tokens und holt neue Messungen (auch per Withings-Benachrichtigung). Ergebnis: Körpermaße füllen sich automatisch. |
 | **Apple Health** | ⚠️ nur mit nativer App | groß | HealthKit hat keine Web-Schnittstelle; eine Web-App/PWA kann es nicht lesen. Nötig: App-Hülle (z. B. Capacitor mit HealthKit-Plugin), Apple-Entwicklerprogramm (kostenpflichtig), Mac mit Xcode, Verteilung über TestFlight/App Store. Behelfe: Withings überträgt Waagendaten ohnehin auch an Apple Health – über die Withings-Anbindung kommen sie also auch zu uns; oder ein iOS-Kurzbefehl, der Werte aus Health per HTTPS an einen persönlichen App-Link schickt. |
 | **Google Fit** | ❌ nicht sinnvoll | – | Google Fit-APIs nehmen seit Mai 2024 keine neuen Entwickler an und werden 2026 abgeschaltet. Nachfolger: **Health Connect** (nur auf dem Android-Gerät, braucht wie Apple Health eine native App) und die **Google Health API** (Cloud, Google-OAuth; Nachfolger der Fitbit-Schnittstelle, für Fitbit-/Google-Geräte). |
+| **Health Connect** (Android) | ✅ umgesetzt | mittel | Android-App als Hülle (Capacitor) mit Health-Connect-Plugin; liest Gewicht und Körperfett, die z. B. die Withings-App dorthin schreibt – ohne Withings-Entwicklerkonto. Siehe [09](09-health-connect-android.md). |
 
-**Umgesetzt:** das Kalender-Abo (siehe oben). **Empfehlung** für danach: Withings (füllt Körpermaße automatisch und
-deckt über die Withings-Synchronisierung auch Apple Health für Waagendaten ab). Eine native App für Apple Health und
-Health Connect lohnt erst, wenn Schritte, Schlaf oder Herzfrequenz einfließen sollen.
+**Umgesetzt:** das Kalender-Abo (siehe oben) und – statt der Withings-Schnittstelle – **Health Connect** über eine
+Android-App ([09](09-health-connect-android.md)): Die Withings-App schreibt Waagendaten ohnehin nach Health Connect,
+so kommen sie ohne eigenes Withings-Entwicklerkonto und ohne Server-Tokens in die Körpermaße. Für iPhone bliebe die
+Withings-Schnittstelle (oder HealthKit mit nativer iOS-App).
 
 Quellen (abgerufen am 06.11.2026):
 [Google Fit Migration FAQ](https://developer.android.com/health-and-fitness/health-connect/migration/fit/faq),

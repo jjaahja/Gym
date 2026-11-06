@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Gym</string>
+    <string name="title_activity_main">Gym</string>
+    <string name="package_name">de.jjaahja.gym</string>
+    <string name="custom_url_scheme">de.jjaahja.gym</string>
+    <!-- Health Connect zeigt diese Seite unter „Datennutzung“ der App -->
+    <string name="health_connect_privacy_policy_url">https://gym-alpha-flax.vercel.app/datenschutz</string>
+</resources>

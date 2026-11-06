@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
+import { useHealthSync } from "@/lib/health/use-health-sync";
 import { getDb } from "@/lib/offline/db";
 import { clearHistory } from "@/lib/offline/history";
 import { writeToOutbox } from "@/lib/offline/sink";
@@ -40,6 +42,7 @@ export function SettingsForm() {
     await clearHistory(getDb());
     await getDb().measurements.clear();
     resetDeviceSync();
+    useHealthSync.getState().disconnect();
     workoutStore.setState({ session: null });
     planStore.getState().clear();
     await supabase.auth.signOut();
@@ -124,6 +127,11 @@ export function SettingsForm() {
           Abmelden
         </button>
       )}
+      <p className="text-center text-sm">
+        <Link href="/datenschutz" className="text-muted underline underline-offset-4">
+          Datenschutz
+        </Link>
+      </p>
     </div>
   );
 }

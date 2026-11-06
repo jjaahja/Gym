@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
+import { isAndroidApp } from "@/lib/health/health-connect";
+import { useHealthSync } from "@/lib/health/use-health-sync";
 import { getDb } from "@/lib/offline/db";
 import { syncDevice } from "@/lib/offline/device-sync";
 import { useSyncStatus } from "@/lib/offline/sync";
@@ -30,6 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <StoreHydration />
       <SyncManager />
+      <HealthConnectSync />
       <ServiceWorkerRegistration />
       {children}
     </QueryClientProvider>
@@ -72,6 +75,25 @@ function SyncManager() {
       window.removeEventListener("online", run);
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);
+    };
+  }, []);
+  return null;
+}
+
+/** Android-App: Gewicht/Körperfett aus Health Connect nach dem ersten Server-Abgleich und bei Rückkehr in die App. */
+function HealthConnectSync() {
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    const health = useHealthSync.getState();
+    health.load();
+    const run = () => void useHealthSync.getState().autoSync();
+    const unsubscribe = useSyncStatus.subscribe((s, prev) => s.firstPull === "done" && prev.firstPull !== "done" && run());
+    const onVisible = () => document.visibilityState === "visible" && run();
+    run();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
   return null;

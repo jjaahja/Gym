@@ -17,6 +17,7 @@ import {
   weightUnitLabel,
 } from "@/lib/units";
 import { useSettings } from "@/stores/settings";
+import { HealthConnectCard } from "./health-connect-card";
 import { dayToMs, formatDate, formatDateMedium, formatDateShort, isoDay, num, signed } from "./format";
 
 type Unit = ReturnType<typeof useSettings.getState>["unitSystem"];
@@ -53,6 +54,7 @@ export function BodyTab({ measurements }: { measurements: readonly Measurement[]
 
   return (
     <div className="space-y-4">
+      <HealthConnectCard />
       <MeasurementForm measurements={measurements} unit={unit} />
 
       {field ? (

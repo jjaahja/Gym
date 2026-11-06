@@ -144,3 +144,12 @@ export function MoonIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function HeartPulseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M19.5 12.6 12 20l-7.5-7.4A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 7.5 6.5z" />
+      <path d="M3.5 12h4l1.5-2.5 2.5 5 1.5-2.5h7.5" />
+    </Icon>
+  );
+}

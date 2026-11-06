@@ -333,8 +333,9 @@ function CompletionSummary() {
       <h1 className="text-2xl font-bold tracking-tight">Stark! Training gespeichert.</h1>
       <Card>
         <p className="tabular">
-          <span className="text-2xl font-bold">{minutes}</span> min · <span className="text-2xl font-bold">{sets}</span> Sätze ·{" "}
-          <span className="text-2xl font-bold">{result.session.exercises.length}</span> Übungen
+          <span className="text-2xl font-bold">{minutes}</span> min · <span className="text-2xl font-bold">{sets}</span>{" "}
+          {sets === 1 ? "Satz" : "Sätze"} · <span className="text-2xl font-bold">{result.session.exercises.length}</span>{" "}
+          {result.session.exercises.length === 1 ? "Übung" : "Übungen"}
         </p>
       </Card>
       <Card>

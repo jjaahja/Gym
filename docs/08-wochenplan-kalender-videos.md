@@ -92,7 +92,7 @@ die Warteschlange (einzeln geschrieben, der Rest ging beim Neuladen verloren). B
 | **Apple Health** | ⚠️ nur mit nativer App | groß | HealthKit hat keine Web-Schnittstelle; eine Web-App/PWA kann es nicht lesen. Nötig: App-Hülle (z. B. Capacitor mit HealthKit-Plugin), Apple-Entwicklerprogramm (kostenpflichtig), Mac mit Xcode, Verteilung über TestFlight/App Store. Behelfe: Withings überträgt Waagendaten ohnehin auch an Apple Health – über die Withings-Anbindung kommen sie also auch zu uns; oder ein iOS-Kurzbefehl, der Werte aus Health per HTTPS an einen persönlichen App-Link schickt. |
 | **Google Fit** | ❌ nicht sinnvoll | – | Google Fit-APIs nehmen seit Mai 2024 keine neuen Entwickler an und werden 2026 abgeschaltet. Nachfolger: **Health Connect** (nur auf dem Android-Gerät, braucht wie Apple Health eine native App) und die **Google Health API** (Cloud, Google-OAuth; Nachfolger der Fitbit-Schnittstelle, für Fitbit-/Google-Geräte). |
 
-**Umgesetzt:** das Kalender-Abo (siehe oben). **Empfehlung** für danach: zuerst das Kalender-Abo (klein, kein neues Konto), dann Withings (füllt Körpermaße automatisch und
+**Umgesetzt:** das Kalender-Abo (siehe oben). **Empfehlung** für danach: Withings (füllt Körpermaße automatisch und
 deckt über die Withings-Synchronisierung auch Apple Health für Waagendaten ab). Eine native App für Apple Health und
 Health Connect lohnt erst, wenn Schritte, Schlaf oder Herzfrequenz einfließen sollen.
 

@@ -1,0 +1,8 @@
+# Nicht zu Vercel hochladen: lokale Geheimnisse und Build-Artefakte
+.env*
+!.env.example
+node_modules
+.next
+coverage
+test-results
+playwright-report

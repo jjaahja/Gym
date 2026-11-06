@@ -1,5 +1,7 @@
 # Gym – adaptive, wissenschaftsbasierte Trainings-App
 
+**Live: https://gym-alpha-flax.vercel.app** – [Veröffentlichung & Installation aufs Handy](docs/07-veroeffentlichung.md)
+
 Plattformübergreifende Web-App (PWA). Sie begleitet Nutzer von der Trainingsplanung bis zum Live-Tracking im Gym,
 passt den Plan anhand der Leistung an und zeigt bei jedem Schritt sportwissenschaftlich belegte Richtwerte.
 
@@ -23,7 +25,8 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **3. Übungs-Datenbank, wissenschaftliche Richtwerte & Plan-Generierung** – [Doku](docs/03-katalog-und-logik.md)
 - [x] **4. UI: Onboarding, Dashboard, Live-Workout-Tracker** – [Doku](docs/04-oberflaeche-und-tracker.md)
 - [x] **5. Datenvisualisierung & Mesozyklus-Abschluss** (Kraft, Wochenvolumen, Körpermaße, Pump; Volumen-, Deload- und Wechselentscheidungen) – [Doku](docs/05-fortschritt-und-mesozyklus.md)
-- [x] **6. Geräte-Abgleich** (Server → Gerät: Plan, Protokoll, Trainings, Körpermaße, Einstellungen; Kontowechsel) – [Doku](docs/06-geraete-abgleich.md) – *wartet auf Freigabe*
+- [x] **6. Geräte-Abgleich** (Server → Gerät: Plan, Protokoll, Trainings, Körpermaße, Einstellungen; Kontowechsel) – [Doku](docs/06-geraete-abgleich.md)
+- [x] **7. Veröffentlichung** (Vercel + Supabase, live getestet mit zwei Geräten) – [Doku](docs/07-veroeffentlichung.md)
 
 ## Tech-Stack
 

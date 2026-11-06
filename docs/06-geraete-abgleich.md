@@ -61,9 +61,42 @@ Alles andere wird aus den Zeilen abgeleitet – so wie das Gerät es selbst tut:
   Pläne (aktiv und archiviert, mit Wechsel, Deload und zurückgenommener Volumenänderung), 5 Anpassungen,
   3 Trainings und 2 Körpermaße identisch wiederhergestellt. Eine absichtlich verfälschte Erwartung wird erkannt.
 - **Browser (Demo-Modus):** Dashboard ohne Plan hängt nicht bei „Lade …“, Schritt-5-Ablauf unverändert grün.
+- **Live gegen das Supabase-Projekt** (Frankfurt, Postgres 17; zwei getrennte Browserprofile als Geräte, zwei
+  vorab bestätigte Testkonten, danach samt Daten gelöscht) – alle 18 Prüfungen bestanden:
+  - Gerät A: Anmeldung, Plan, Training, Körpermaße → 64 Änderungen in 9 s auf dem Server (Plan inkl. Trainingstag,
+    Zielvolumen, Tagesvorlage).
+  - Gerät B (frisch, gleiches Konto): Plan mit richtigem nächsten Tag, Kraftverlauf und Körpermaße von A.
+  - B trainiert und stellt auf lb um → A übernimmt beides beim nächsten Abgleich.
+  - Kontowechsel auf B: das zweite Konto sieht nichts vom ersten. Keine Konsolenfehler.
 
-Nicht getestet: der Ablauf gegen ein echtes Supabase-Projekt (Auth + PostgREST) im Browser – hier steht keins zur
-Verfügung. Die Abfragen sind gegen das Schema geprüft, das JSON-Format gegen Postgres.
+## Gebündelte Übertragung
+
+Die Outbox schickt aufeinanderfolgende Änderungen derselben Tabelle mit denselben Spalten als **eine** Anfrage
+(höchstens 200 Zeilen). Die Reihenfolge zwischen Tabellen bleibt (Training vor Übung vor Satz); kommt dieselbe Zeile
+mehrfach vor, gilt die letzte Version. Teil-Updates (z. B. nur die Einheit im Profil) bleiben einzeln, damit keine
+Spalte mit NULL überschrieben wird. Ergebnis im Live-Test: 64 Änderungen (Plan + Training + Messung) in 9 s statt
+über einer Minute – bei schlechtem Empfang im Gym zählt jede gesparte Anfrage.
+
+Außerdem zeigen die Einstellungen direkt nach dem Laden „Prüfe ausstehende Änderungen …“ statt fälschlich
+„Alles synchronisiert.“, bis die Warteschlange gezählt ist; das Abmelden zählt selbst nach.
+
+## Supabase-Projekt
+
+Eingerichtet über die Management-API (`api.supabase.com`, Personal Access Token in der Umgebung „Gym“):
+
+1. Migrationen in Reihenfolge aus `supabase/migrations/`, danach `supabase/seed.sql` (65 Übungen, 41 Richtwerte,
+   35 Quellen). Alle 20 Tabellen mit Row Level Security; Resolver-Parität TypeScript = SQL auch dort geprüft.
+2. App-Konfiguration in `.env.local` (nicht im Repository): `NEXT_PUBLIC_SUPABASE_URL` und der **Publishable Key**
+   (Dashboard → Project Settings → API Keys). Beide sind öffentlich; geschützt wird über RLS. Der Secret Key wird
+   nirgends verwendet.
+
+**Vor dem Veröffentlichen der App** (Dashboard → Authentication):
+
+- **URL Configuration:** „Site URL“ und „Redirect URLs“ auf die echte Adresse setzen (derzeit
+  `http://localhost:3000`), sonst führt der Bestätigungslink nach der Registrierung ins Leere.
+- **E-Mails:** Der eingebaute Versand von Supabase schickt Bestätigungsmails nur an Mitglieder der Organisation und
+  nur wenige pro Stunde. Für andere Nutzer einen eigenen SMTP-Dienst eintragen (Authentication → Emails → SMTP).
+- Die E-Mail-Bestätigung bleibt eingeschaltet; für den Test wurden stattdessen bestätigte Testkonten angelegt.
 
 ## Bekannte Grenzen
 

@@ -5,7 +5,8 @@ import { flushOutboxOnce, supabaseBackend } from "./outbox";
 
 // Sync-Status für die UI (Badge im Tracker, Einstellungen).
 interface SyncStatus {
-  pending: number;
+  /** Offene Outbox-Einträge; null, solange noch nicht gezählt (direkt nach dem Laden) */
+  pending: number | null;
   syncing: boolean;
   lastError: string | null;
   lastSyncedAt: string | null;
@@ -18,7 +19,7 @@ interface SyncStatus {
 }
 
 export const useSyncStatus = create<SyncStatus>(() => ({
-  pending: 0,
+  pending: null,
   syncing: false,
   lastError: null,
   lastSyncedAt: null,

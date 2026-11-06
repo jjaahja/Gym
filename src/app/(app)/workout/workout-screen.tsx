@@ -138,7 +138,7 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
   const activeKey = expandedKey ?? items[firstOpen >= 0 ? firstOpen : 0]?.key ?? null;
 
   const completedSets = session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.isCompleted && s.setType !== "warmup").length, 0);
-  const syncLabel = !session.userId ? "Nur lokal" : syncing ? "Synchronisiere …" : pending > 0 ? `${pending} ausstehend` : "Synchronisiert";
+  const syncLabel = !session.userId ? "Nur lokal" : syncing ? "Synchronisiere …" : (pending ?? 0) > 0 ? `${pending} ausstehend` : "Synchronisiert";
 
   return (
     <div className="space-y-3 pb-40">

@@ -29,7 +29,9 @@ export function SettingsForm() {
 
   async function signOut() {
     if (!supabase) return;
-    if (pending > 0 && !window.confirm(`${pending} Änderungen sind noch nicht synchronisiert und gehen verloren. Trotzdem abmelden?`)) {
+    // Direkt zählen – die Anzeige kann kurz nach dem Laden noch leer sein
+    const open = await getDb().outbox.count();
+    if (open > 0 && !window.confirm(`${open} Änderungen sind noch nicht synchronisiert und gehen verloren. Trotzdem abmelden?`)) {
       return;
     }
     setSigningOut(true);
@@ -85,7 +87,13 @@ export function SettingsForm() {
         {supabase ? (
           <>
             <p className="mt-1 text-sm text-muted">
-              {pending === 0 ? "Alles synchronisiert." : `${pending} Änderungen warten auf Netz.`}
+              {pending === null
+                ? "Prüfe ausstehende Änderungen …"
+                : pending === 0
+                  ? "Alles synchronisiert."
+                  : syncing
+                    ? `${pending} Änderungen werden übertragen …`
+                    : `${pending} Änderungen warten auf Netz.`}
               {lastSyncedAt && ` Zuletzt: ${new Date(lastSyncedAt).toLocaleTimeString("de-DE")}.`}
             </p>
             <p className="mt-1 text-sm text-muted">

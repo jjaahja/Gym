@@ -2,6 +2,7 @@ import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import type { AdaptationRecord, PlanStore } from "@/stores/plan-store";
 import type { WorkoutStore } from "@/stores/workout-store";
 import type { GymDB } from "./db";
+import { prependMany, type NewOutboxEntry } from "./outbox";
 import { adaptationFromRemote, measurementFromRemote, planFromRemote, sessionFromRemote, type RemoteState } from "./remote";
 
 // Server → Gerät. Läuft nach dem Hochladen der Outbox. Regeln:
@@ -10,6 +11,9 @@ import { adaptationFromRemote, measurementFromRemote, planFromRemote, sessionFro
 // - Körpermaße: Server-Stand übernehmen (auch Löschungen), solange lokal nichts dazu aussteht.
 // - Plan, Anpassungen, Einstellungen: nur ersetzen, wenn lokal nichts aussteht und kein Training läuft –
 //   sonst würde ein älterer Server-Stand frische Änderungen dieses Geräts überschreiben.
+// - Selbstreparatur: Kennt der Server den Plan dieses Geräts nicht, wird er vollständig neu hochgeladen – und zwar
+//   VOR allen wartenden Einträgen, auch während eines Trainings. Sonst scheitern Trainings, die auf den Plan
+//   verweisen, an der Zugriffsregel, und die strikt geordnete Outbox käme nie an ihnen vorbei.
 
 export interface OwnerStorage {
   get(): string | null;
@@ -120,7 +124,16 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   });
   result.measurements = await db.measurements.count();
 
-  // 4) Plan, Anpassungen, Einstellungen – nur ohne ausstehende Änderungen
+  // 4) Server kennt den Plan dieses Geräts nicht → vor alle wartenden Einträge stellen
+  const localPlan = plans.getState().plan;
+  if (!remote.plan && localPlan && localPlan.userId === userId) {
+    const entries: NewOutboxEntry[] = [];
+    plans.getState().republish((e) => entries.push(e));
+    await prependMany(db, entries);
+    result.planRepublished = true;
+  }
+
+  // 5) Plan, Anpassungen, Einstellungen – nur ohne ausstehende Änderungen
   const changedMeanwhile = plans.getState().plan !== planBefore || plans.getState().adaptations !== adaptationsBefore;
   if (pending.length > 0 || changedMeanwhile) {
     result.planSkipped = "pending_changes";
@@ -149,10 +162,6 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   } else if (local.plan && local.plan.userId !== userId) {
     plans.getState().clear();
     result.planReplaced = true;
-  } else if (local.plan && local.plan.userId === userId) {
-    // Server kennt den Plan dieses Geräts nicht (z. B. App direkt nach dem Anlegen geschlossen) → erneut hochladen
-    plans.getState().republish();
-    result.planRepublished = true;
   }
   return result;
 }

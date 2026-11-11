@@ -43,7 +43,7 @@ async function pushAndPull(force: boolean): Promise<void> {
 
   useSyncStatus.setState({ pulling: true });
   try {
-    await pullFromServer({
+    const result = await pullFromServer({
       db: getDb(),
       plans: planStore,
       workout: workoutStore,
@@ -54,6 +54,8 @@ async function pushAndPull(force: boolean): Promise<void> {
       settle: outboxIdle,
     });
     useSyncStatus.setState({ lastPulledAt: new Date().toISOString(), pullError: null });
+    // Plan wurde vor die wartenden Einträge gestellt → gleich hochladen (löst hängende Trainings)
+    if (result.planRepublished) await syncNow();
     settleFirstPull("done");
   } catch (err) {
     useSyncStatus.setState({ pullError: err instanceof Error ? err.message : String(err) });

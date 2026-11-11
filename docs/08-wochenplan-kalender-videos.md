@@ -54,8 +54,16 @@ die Warteschlange (einzeln geschrieben, der Rest ging beim Neuladen verloren). B
 
 - Alle Einträge einer Aktion werden gesammelt und in **einer** IndexedDB-Transaktion geschrieben (`enqueueMany`) –
   schnell und alles oder nichts.
-- **Selbstreparatur:** Kennt der Server den Plan eines Geräts nicht (und es steht nichts mehr aus), lädt der
-  Abgleich ihn vollständig erneut hoch (`republish`, inkl. Anpassungsprotokoll).
+- **Selbstreparatur:** Kennt der Server den Plan eines Geräts nicht, lädt der Abgleich ihn vollständig erneut hoch
+  (`republish`, inkl. Anpassungsprotokoll) – und stellt ihn **vor** alle wartenden Einträge (`prependMany`), auch
+  während eines Trainings. Veraltete wartende Einträge derselben Zeilen fallen dabei weg.
+
+  *Fehler aus dem Live-Betrieb (11.11.):* „new row violates row-level security policy for table workout_sessions“.
+  Ein Plan aus der Zeit vor der Bündelung war nur zum Teil angekommen (Fragebogen und Ausstattung ja, Plan nein).
+  Die Zugriffsregel für Trainings verlangt einen eigenen Plan, also scheiterte jedes Training – und weil die Outbox
+  strikt in Reihenfolge überträgt und die Reparatur nur lief, wenn nichts mehr ausstand, hing der Abgleich dauerhaft.
+  Nachgestellt gegen Postgres mit den echten Zugriffsregeln (`scripts/verify-plan-repair.ts`): ohne Reparatur genau
+  dieser Fehler, mit Reparatur kommen Plan, Training, Übungen und Sätze an.
 
 ## Übung im Training tauschen
 

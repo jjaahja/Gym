@@ -48,6 +48,32 @@ export async function enqueue(db: GymDB, entry: NewOutboxEntry): Promise<void> {
   await db.outbox.add({ ...entry, createdAt: Date.now(), attempts: 0 });
 }
 
+/**
+ * Einträge VOR alle wartenden stellen (eine Transaktion). Für fehlende Eltern-Zeilen: Kennt der Server den Plan
+ * nicht, scheitern wartende Trainings an der Zugriffsregel (Plan muss dem Nutzer gehören) – und die Outbox hängt,
+ * weil sie strikt in Reihenfolge überträgt. Wartende Einträge, die die neuen ersetzen (dieselbe Zeile; bei
+ * `user_equipment` alle, da die neuen die Ausstattung komplett setzen), fallen weg – sonst würde danach ein älterer
+ * Stand übertragen. Profile bleiben: Deren Einträge setzen unterschiedliche Spalten.
+ */
+export async function prependMany(db: GymDB, entries: readonly NewOutboxEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const replaced = new Set(entries.filter((e) => e.table !== "profiles").map((e) => `${e.table}|${e.rowId}`));
+  const resetsEquipment = entries.some((e) => e.table === "user_equipment");
+  const createdAt = Date.now();
+  await db.transaction("rw", db.outbox, async () => {
+    const pending = await db.outbox.orderBy("seq").toArray();
+    const kept = pending.filter(
+      (e) => !replaced.has(`${e.table}|${e.rowId}`) && !(resetsEquipment && e.table === "user_equipment"),
+    );
+    await db.outbox.clear();
+    await db.outbox.bulkAdd([
+      ...entries.map((e) => ({ ...e, createdAt, attempts: 0 })),
+      // ohne seq: neu nummeriert, damit sie hinter den vorangestellten Einträgen liegen
+      ...kept.map((e) => ({ ...e, seq: undefined })),
+    ]);
+  });
+}
+
 /** Mehrere Einträge in einer Transaktion – Reihenfolge bleibt erhalten, alles oder nichts. */
 export async function enqueueMany(db: GymDB, entries: readonly NewOutboxEntry[]): Promise<void> {
   if (entries.length === 0) return;

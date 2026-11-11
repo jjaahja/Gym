@@ -126,8 +126,11 @@ export interface PlanState {
   swapExercise(planExerciseId: string, replacementSlug: string): AdaptationRecord | null;
   /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
   setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
-  /** Plan erneut vollständig hochladen (Server kennt ihn nicht, z. B. nach unterbrochenem Speichern) */
-  republish(): void;
+  /**
+   * Plan erneut vollständig hochladen (Server kennt ihn nicht, z. B. nach unterbrochenem Speichern).
+   * Mit `sink` landen die Einträge dort statt in der Outbox – damit der Abgleich sie vor wartende Einträge stellen kann.
+   */
+  republish(sink?: (entry: NewOutboxEntry) => void): void;
   /** Stand vom Server übernehmen (anderes Gerät) – erzeugt keine Outbox-Einträge */
   replaceFromServer(state: { plan: StoredPlan | null; adaptations: AdaptationRecord[] }): void;
   clear(): void;
@@ -374,28 +377,28 @@ export function createPlanStore(deps: PlanStoreDeps) {
         };
 
         /** Alle Zeilen eines Plans in FK-sicherer Reihenfolge: Assessment → Equipment → Plan → Tage → Übungen → Profil. */
-        const emitFullPlan = (plan: StoredPlan, timezone?: string) => {
+        const emitFullPlan = (plan: StoredPlan, timezone?: string, sink: (entry: NewOutboxEntry) => void = deps.sink) => {
           const userId = plan.userId;
           if (!userId) return;
-          deps.sink({ table: "user_assessments", op: "upsert", rowId: plan.assessmentId, payload: assessmentRow(plan) });
-          deps.sink({ table: "user_equipment", op: "delete", rowId: userId, payload: { user_id: userId } });
+          sink({ table: "user_assessments", op: "upsert", rowId: plan.assessmentId, payload: assessmentRow(plan) });
+          sink({ table: "user_equipment", op: "delete", rowId: userId, payload: { user_id: userId } });
           for (const slug of plan.assessment.equipment) {
             const equipmentId = catalogId("equipment", slug);
-            deps.sink({
+            sink({
               table: "user_equipment",
               op: "upsert",
               rowId: `${userId}:${equipmentId}`,
               payload: { user_id: userId, equipment_id: equipmentId },
             });
           }
-          deps.sink({ table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
+          sink({ table: "training_plans", op: "upsert", rowId: plan.id, payload: planRow(plan, "active") });
           for (const day of plan.days) {
-            deps.sink({ table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(plan.id, day) });
+            sink({ table: "plan_days", op: "upsert", rowId: day.id, payload: planDayRow(plan.id, day) });
           }
           for (const day of plan.days)
             for (const e of day.exercises)
-              deps.sink({ table: "plan_exercises", op: "upsert", rowId: e.id, payload: planExerciseRow(day.id, e) });
-          deps.sink({
+              sink({ table: "plan_exercises", op: "upsert", rowId: e.id, payload: planExerciseRow(day.id, e) });
+          sink({
             table: "profiles",
             op: "upsert",
             rowId: userId,
@@ -535,12 +538,12 @@ export function createPlanStore(deps: PlanStoreDeps) {
             return plan;
           },
 
-          republish() {
+          republish(sink = deps.sink) {
             const plan = get().plan;
             if (!plan?.userId) return;
-            emitFullPlan(plan);
+            emitFullPlan(plan, undefined, sink);
             for (const a of get().adaptations.filter((r) => r.planId === plan.id).reverse()) {
-              deps.sink({ table: "plan_adaptations", op: "upsert", rowId: a.id, payload: adaptationRow(plan.userId, a) });
+              sink({ table: "plan_adaptations", op: "upsert", rowId: a.id, payload: adaptationRow(plan.userId, a) });
             }
           },
 

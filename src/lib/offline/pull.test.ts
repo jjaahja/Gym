@@ -5,7 +5,7 @@ import { createPlanStore } from "@/stores/plan-store";
 import { createWorkoutStore } from "@/stores/workout-store";
 import { byId, deviceHistory, memory, USER } from "@/test/device-history";
 import { GymDB } from "./db";
-import { enqueue } from "./outbox";
+import { enqueue, flushOutbox } from "./outbox";
 import { pullFromServer, sameContent, type OwnerStorage } from "./pull";
 import type { RemoteState } from "./remote";
 
@@ -162,18 +162,117 @@ describe("Selbstreparatur", () => {
     const source = await deviceHistory();
     const device = newDevice();
     await device.pull(source.server.state(USER));
-    device.entries.length = 0;
 
     const emptyServer = { ...source.server.state(USER), plan: null, assessment: null, adaptations: [] };
     const result = await device.pull(emptyServer);
     expect(result.planRepublished).toBe(true);
-    const tables = (device.entries as { table: string }[]).map((e) => e.table);
+    const tables = (await device.db.outbox.orderBy("seq").toArray()).map((e) => e.table);
     expect(tables[0]).toBe("user_assessments");
     expect(tables).toContain("training_plans");
     expect(tables.filter((t) => t === "plan_days")).toHaveLength(4);
     expect(tables.at(-1)).toBe("plan_adaptations");
     expect(tables.indexOf("training_plans")).toBeLessThan(tables.indexOf("plan_days"));
+    expect(device.entries).toEqual([]); // direkt in die Outbox, nicht hinten angehängt
     // Plan bleibt lokal unverändert
     expect(device.plans.getState().plan).toEqual(source.plans.getState().plan);
   });
+
+  it("löst hängende Trainings: Plan fehlt auf dem Server, Training wartet → Plan wird davor gestellt", async () => {
+    // Fall aus dem Live-Betrieb: Beim Anlegen kam nur ein Teil des Plans an (Fragebogen ja, Plan nein).
+    // Ein Training mit plan_id scheitert an der Zugriffsregel, die Outbox hängt – und weil etwas aussteht,
+    // lief die alte Selbstreparatur nie.
+    const source = await deviceHistory();
+    const device = newDevice();
+    await device.pull(source.server.state(USER));
+    const plan = device.plans.getState().plan!;
+    const session = {
+      id: "aaaaaaaa-0000-4000-8000-000000000001",
+      user_id: USER,
+      plan_id: plan.id,
+      plan_day_id: plan.days[0].id,
+      status: "in_progress",
+      started_at: "2026-12-09T09:00:00.000Z",
+    };
+    await enqueue(device.db, { table: "workout_sessions", op: "upsert", rowId: session.id, payload: session });
+    await enqueue(device.db, {
+      table: "exercise_logs",
+      op: "upsert",
+      rowId: "aaaaaaaa-0000-4000-8000-000000000002",
+      payload: { id: "aaaaaaaa-0000-4000-8000-000000000002", session_id: session.id, plan_exercise_id: plan.days[0].exercises[0].id },
+    });
+    // nach dem Training: Planzeile (nächster Tag) – älterer Stand als der, den die Reparatur hochlädt
+    await enqueue(device.db, { table: "training_plans", op: "upsert", rowId: plan.id, payload: { id: plan.id, user_id: USER, next_day_index: 0 } });
+    await enqueue(device.db, { table: "profiles", op: "upsert", rowId: USER, payload: { id: USER, unit_system: "imperial" } });
+
+    // Server mit echter Zugriffsregel: Training nur mit eigenem Plan, Kindzeilen nur mit vorhandenem Elternteil
+    const server = strictServer();
+    const before = await flushOutbox(device.db, server.backend);
+    expect(before.error).toBe('new row violates row-level security policy for table "workout_sessions"');
+    expect(before.remaining).toBe(4);
+
+    const emptyServer = { ...source.server.state(USER), plan: null, assessment: null, adaptations: [] };
+    const result = await device.pull(emptyServer);
+    expect(result).toMatchObject({ planRepublished: true, planSkipped: "pending_changes" });
+
+    const queued = await device.db.outbox.orderBy("seq").toArray();
+    const firstSession = queued.findIndex((e) => e.table === "workout_sessions");
+    expect(queued.findIndex((e) => e.table === "training_plans")).toBeLessThan(firstSession);
+    expect(queued.findIndex((e) => e.table === "plan_exercises")).toBeLessThan(firstSession);
+    // veraltete Planzeile ersetzt, Profiländerung (andere Spalten) bleibt hinten
+    expect(queued.filter((e) => e.table === "training_plans")).toHaveLength(1);
+    expect(queued.at(-1)).toMatchObject({ table: "profiles", payload: { unit_system: "imperial" } });
+
+    const after = await flushOutbox(device.db, server.backend);
+    expect(after).toEqual({ synced: queued.length, remaining: 0 });
+    expect(server.rows("workout_sessions")).toHaveLength(1);
+    expect(server.rows("training_plans")[0]).toMatchObject({ id: plan.id, status: "active", next_day_index: plan.nextDayIndex });
+    expect(server.rows("profiles")[0]).toMatchObject({ unit_system: "imperial" });
+
+    // Während eines laufenden Trainings ebenso (der lokale Plan wird dabei nicht angefasst)
+    const running = newDevice();
+    await running.pull(source.server.state(USER));
+    running.workout.getState().start({ userId: USER });
+    const r2 = await running.pull(emptyServer);
+    expect(r2).toMatchObject({ planRepublished: true, planSkipped: "workout_running" });
+  });
 });
+
+/** Fake-Supabase mit den Prüfungen der Zugriffsregeln/Fremdschlüssel, die für die Reihenfolge zählen. */
+function strictServer() {
+  const tables = new Map<string, Map<string, Record<string, unknown>>>();
+  const table = (name: string) => tables.get(name) ?? tables.set(name, new Map()).get(name)!;
+  const key = (name: string, row: Record<string, unknown>) =>
+    name === "user_equipment" ? `${row.user_id}:${row.equipment_id}` : String(row.id);
+  const has = (name: string, id: unknown) => id != null && table(name).has(String(id));
+  const check = (name: string, row: Record<string, unknown>) => {
+    const rls = () => new Error(`new row violates row-level security policy for table "${name}"`);
+    if (name === "workout_sessions" && row.plan_id != null && !has("training_plans", row.plan_id)) throw rls();
+    if (name === "plan_days" && !has("training_plans", row.plan_id)) throw rls();
+    if (name === "plan_exercises" && !has("plan_days", row.plan_day_id)) throw rls();
+    if (name === "plan_adaptations" && !has("training_plans", row.plan_id)) throw rls();
+    if (name === "exercise_logs" && !has("workout_sessions", row.session_id)) throw rls();
+    if (name === "exercise_logs" && row.plan_exercise_id != null && !has("plan_exercises", row.plan_exercise_id)) {
+      throw new Error('insert or update on table "exercise_logs" violates foreign key constraint');
+    }
+  };
+  const upsert = (name: string, row: Record<string, unknown>) => {
+    const k = key(name, row);
+    check(name, { ...table(name).get(k), ...row });
+    table(name).set(k, { ...table(name).get(k), ...row });
+  };
+  return {
+    rows: (name: string) => [...table(name).values()],
+    backend: {
+      async upsert(name: string, row: Record<string, unknown>) {
+        upsert(name, row);
+      },
+      async upsertMany(name: string, rows: Record<string, unknown>[]) {
+        for (const row of rows) check(name, { ...table(name).get(key(name, row)), ...row });
+        rows.forEach((row) => upsert(name, row));
+      },
+      async remove(name: string, match: Record<string, unknown>) {
+        for (const [k, row] of table(name)) if (Object.entries(match).every(([c, v]) => row[c] === v)) table(name).delete(k);
+      },
+    },
+  };
+}

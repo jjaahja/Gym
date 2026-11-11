@@ -156,3 +156,35 @@ describe("Outbox – gebündelte Übertragung", () => {
     expect(left[0]).toMatchObject({ attempts: 1, lastError: "abgelehnt" });
   });
 });
+
+describe("prependMany", () => {
+  it("stellt Einträge vor wartende, ersetzt veraltete derselben Zeile und behält Profile und Reihenfolge", async () => {
+    const { prependMany } = await import("./outbox");
+    const db = new GymDB(`pm-${crypto.randomUUID()}`, { indexedDB: new IDBFactory(), IDBKeyRange });
+    await enqueue(db, { table: "workout_sessions", op: "upsert", rowId: "s1", payload: { id: "s1", plan_id: "p1" } });
+    await enqueue(db, { table: "training_plans", op: "upsert", rowId: "p1", payload: { id: "p1", next_day_index: 1 } });
+    await enqueue(db, { table: "user_equipment", op: "upsert", rowId: "u:old", payload: { user_id: "u", equipment_id: "old" } });
+    await enqueue(db, { table: "profiles", op: "upsert", rowId: "u", payload: { id: "u", unit_system: "imperial" } });
+    await enqueue(db, { table: "exercise_logs", op: "upsert", rowId: "l1", payload: { id: "l1", session_id: "s1" } });
+
+    await prependMany(db, [
+      { table: "training_plans", op: "upsert", rowId: "p1", payload: { id: "p1", next_day_index: 2 } },
+      { table: "user_equipment", op: "delete", rowId: "u", payload: { user_id: "u" } },
+      { table: "user_equipment", op: "upsert", rowId: "u:new", payload: { user_id: "u", equipment_id: "new" } },
+      { table: "profiles", op: "upsert", rowId: "u", payload: { id: "u", onboarding_completed_at: "2026-11-06" } },
+    ]);
+
+    const rows = await db.outbox.orderBy("seq").toArray();
+    expect(rows.map((e) => `${e.table}:${e.rowId}`)).toEqual([
+      "training_plans:p1",
+      "user_equipment:u",
+      "user_equipment:u:new",
+      "profiles:u",
+      "workout_sessions:s1",
+      "profiles:u",
+      "exercise_logs:l1",
+    ]);
+    expect(rows[0].payload).toEqual({ id: "p1", next_day_index: 2 });
+    expect(rows[5].payload).toEqual({ id: "u", unit_system: "imperial" });
+  });
+});

@@ -6,8 +6,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Eigenes Plugin: Trainings in Health Connect speichern
+        // Eigene Plugins: Trainings in Health Connect speichern, Updates direkt aus der App
         registerPlugin(GymHealthPlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

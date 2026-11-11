@@ -1,0 +1,12 @@
+{
+  "versionCode": 3,
+  "versionName": "1.2",
+  "file": "gym-1.2.apk",
+  "sha256": "58f0e5ad1b72bf4e0ac2d5c055fa9204827f635f52dfcb4d53bac1992526774c",
+  "size": 4883886,
+  "date": "2026-11-11",
+  "notes": [
+    "Updates direkt in der App installieren – ohne Umweg über Dateien",
+    "Trainings in Health Connect speichern (Einheit, Sätze, Kalorien)"
+  ]
+}

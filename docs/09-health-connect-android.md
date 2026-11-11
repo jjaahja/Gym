@@ -23,17 +23,38 @@ Android-App.
   übernimmt wie im Browser der Service Worker (Training funktioniert offline).
 - Paket `de.jjaahja.gym`, minSdk 26 (Android 8), targetSdk 36, App-Icon und Startbild aus dem PWA-Icon.
 
-### Bauen
+### Bauen und veröffentlichen
 
 ```bash
 npx cap sync android
+# versionCode/versionName in android/app/build.gradle erhöhen
 cd android && ./gradlew assembleRelease   # braucht Android SDK (Plattform 36) und JDK 21
+cd .. && node scripts/release-apk.mjs "Neuerung 1" "Neuerung 2"
+# committen und veröffentlichen → die App bietet das Update an
 ```
 
-Signiert wird mit `android/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) – Schlüssel
-und Datei liegen **nicht** im Repository. Ohne die Datei entsteht eine unsignierte APK. Eine Update-APK muss mit
-demselben Schlüssel signiert sein; mit einem neuen Schlüssel die App einmal deinstallieren und neu installieren (die
-Daten liegen im Konto und kommen beim Anmelden zurück).
+`scripts/release-apk.mjs` kopiert die APK nach `public/downloads/gym-<version>.apk` (ältere werden entfernt) und schreibt
+`public/downloads/version.json` (versionCode, Name, SHA-256, Größe, Neuerungen). Eine neue APK ist nur bei nativen
+Änderungen nötig – Inhalte der App kommen live von der Webseite.
+
+**Signierschlüssel:** Updates installieren sich nur mit demselben Schlüssel. Er liegt **nicht** im (öffentlichen)
+Repository, sondern im Google Drive des Besitzers: „Gym-App Android-Signierschlüssel (NICHT TEILEN).zip“
+(`gym-release.jks`, `keystore.properties`, Anleitung). Für einen Build beide Dateien nach `android/` legen und
+`storeFile` anpassen. Zertifikat (SHA-256): `5242fd202c3ab83335584f0e852f1be95d8794f36688c316bf8bb8aa28d46f3f`.
+
+### Updates in der App (ab 1.2)
+
+- Beim Öffnen (höchstens alle 6 h) vergleicht die App ihre Version mit `/downloads/version.json`. Ist eine neuere da:
+  Hinweis oben („Neue App-Version … verfügbar“) und im Profil die Karte „App-Version“ mit den Neuerungen.
+- „Jetzt aktualisieren“: Das native Plugin `AppUpdate` (`AppUpdatePlugin.kt`) lädt die APK mit Fortschritt, prüft
+  **Prüfsumme**, **Paketname** und **höhere Version** und öffnet den System-Installer („Aktualisieren“). Android prüft
+  zusätzlich die Signatur.
+- Einmalig: „Apps aus dieser Quelle installieren“ für die Gym-App erlauben (Knopf „Installation erlauben“ öffnet die
+  Einstellung; zurück in der App geht es automatisch weiter). Berechtigung `REQUEST_INSTALL_PACKAGES`.
+- App 1.0/1.1 haben die Funktion noch nicht: Sie zeigen den Hinweis und einen Link, der 1.2 im Browser lädt (GitHub,
+  andere Adresse → öffnet sich außerhalb der App). Im Android-Browser bietet das Profil „App herunterladen“ an.
+- `/downloads/` ist ohne Anmeldung erreichbar (Proxy-Ausnahme), APK als Anhang, `version.json` ohne Cache; der
+  Service Worker lässt `/downloads/` aus.
 
 ### Installieren
 

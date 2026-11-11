@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AppUpdateCard } from "@/components/app-update";
 import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { useHealthSync } from "@/lib/health/use-health-sync";
@@ -144,6 +145,8 @@ export function SettingsForm() {
           Abmelden
         </button>
       )}
+      <AppUpdateCard />
+
       <p className="text-center text-sm">
         <Link href="/datenschutz" className="text-muted underline underline-offset-4">
           Datenschutz

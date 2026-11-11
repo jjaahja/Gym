@@ -25,6 +25,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Android-App: als Download, nicht als Text
+        source: "/downloads/:file*.apk",
+        headers: [
+          { key: "Content-Type", value: "application/vnd.android.package-archive" },
+          { key: "Content-Disposition", value: "attachment" },
+        ],
+      },
+      {
+        // Update-Prüfung: immer den aktuellen Stand
+        source: "/downloads/version.json",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
         // Service Worker nie cachen, damit Updates sofort ankommen
         source: "/sw.js",
         headers: [

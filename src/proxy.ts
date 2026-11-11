@@ -71,6 +71,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Alles außer statischen Dateien, Service Worker, Manifest und Icons
-    "/((?!_next/static|_next/image|sw\\.js|manifest\\.webmanifest|icons/|icon\\.svg|apple-icon\\.png|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
+    // downloads/: Android-App und version.json – ohne Anmeldung (Download-Manager und Update-Prüfung)
+    "/((?!_next/static|_next/image|sw\\.js|manifest\\.webmanifest|icons/|downloads/|icon\\.svg|apple-icon\\.png|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
   ],
 };

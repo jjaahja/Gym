@@ -30,6 +30,7 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **8. Wochenplan, Kalender, Übungstausch & Videos** (Wochentage, neue Übersicht, Monatskalender mit Export und Abo, Tausch im Training, 65 geprüfte Ausführungsvideos, Machbarkeit Withings/Apple Health/Google Fit) – [Doku](docs/08-wochenplan-kalender-videos.md)
 - [x] **9. Health Connect & Android-App** (Gewicht und Körperfett z. B. der Withings-Waage automatisch in die Körpermaße, Android-App als Hülle um die Web-App, Datenschutzseite) – [Doku](docs/09-health-connect-android.md)
 - [x] **10. Gewichtsvorschlag, Übung entfernen, Trainings in Health Connect** (Gewicht aus der letzten Leistung, wahlweise Versagen im letzten Satz; Übungen im Training entfernen – nur heute oder aus dem Plan; Trainings mit Sätzen und Kalorien nach Health Connect; tippbares Gewichtsfeld) – [Doku](docs/10-gewichtsvorschlag-entfernen-trainings-health.md)
+- [x] **11. Updates direkt in der Android-App** (Versionsprüfung, Download mit Prüfsumme, System-Installer; Signierschlüssel im Google Drive) – [Doku](docs/09-health-connect-android.md#updates-in-der-app-ab-12)
 
 ## Tech-Stack
 

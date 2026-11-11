@@ -69,6 +69,8 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  // App-Downloads und Update-Prüfung: nie aus dem Cache, nie zwischenspeichern (APK ~5 MB)
+  if (url.pathname.startsWith("/downloads/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(handleNavigation(request));

@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
+import { AppUpdateCheck } from "@/components/app-update";
 import { isAndroidApp } from "@/lib/health/health-connect";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 import { getDb } from "@/lib/offline/db";
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <StoreHydration />
       <SyncManager />
       <HealthConnectSync />
+      <AppUpdateCheck />
       <ServiceWorkerRegistration />
       {children}
     </QueryClientProvider>

@@ -15,6 +15,10 @@ import { dayForWeekday, hasSchedule, isoWeekday, weekdayShort } from "@/lib/trai
 import { planStore, usePlan, usePlanHydrated } from "@/stores/plan";
 import { deloadPrescription, type StoredPlanExercise } from "@/stores/plan-store";
 import { allowsTechnique, prescribe, techniqueFor } from "@/lib/training/plan-generator";
+import { isAndroidApp } from "@/lib/health/health-connect";
+import { useHealthSync } from "@/lib/health/use-health-sync";
+import { rememberSetTimes } from "@/lib/health/workout-sync";
+import { RemoveSheet } from "./remove-sheet";
 import { SwapSheet } from "./swap-sheet";
 import type { StoredPlan } from "@/stores/plan-store";
 import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
@@ -127,7 +131,8 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
 
   // Planübungen des Tages + spontan hinzugefügte Übungen
   const items = useMemo(() => {
-    const planned = (day?.exercises ?? []).map((pe) => {
+    const skipped = new Set(session.skipped ?? []);
+    const planned = (day?.exercises ?? []).filter((pe) => !skipped.has(pe.id)).map((pe) => {
       const original = getExerciseById(pe.exerciseId)!;
       const substituteId = session.substitutions?.[pe.id];
       const substitute = substituteId ? getExerciseById(substituteId) : undefined;
@@ -156,9 +161,11 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
       .filter((e) => !e.planExerciseId || !day?.exercises.some((pe) => pe.id === e.planExerciseId))
       .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, original: null, planned: null, log: e }));
     return [...planned, ...extra].filter((i) => i.exercise);
-  }, [day, session.exercises, session.deload, session.substitutions, goal, experience]);
+  }, [day, session.exercises, session.deload, session.substitutions, session.skipped, goal, experience]);
   const [swapKey, setSwapKey] = useState<string | null>(null);
   const swapItem = items.find((i) => i.key === swapKey && i.original);
+  const [removeKey, setRemoveKey] = useState<string | null>(null);
+  const removeItem = items.find((i) => i.key === removeKey);
 
   const firstOpen = items.findIndex((i) => (i.log?.sets.filter((s) => s.setType === "working").length ?? 0) < (i.planned?.sets ?? 3));
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -215,6 +222,8 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           onNext={nextOpen ? () => setExpandedKey(nextOpen.key) : undefined}
           onSwap={item.original ? () => setSwapKey(item.key) : undefined}
           substitutedFor={item.original && item.original.id !== item.exercise.id ? item.original : null}
+          deload={session.deload ?? false}
+          onRemove={() => setRemoveKey(item.key)}
         />
         );
       })}
@@ -236,6 +245,19 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           experience={experience}
           equipment={plan?.assessment.equipment ?? []}
           canSwap={(swapItem.log?.sets.length ?? 0) === 0}
+        />
+      )}
+
+      {removeItem && (
+        <RemoveSheet
+          key={removeItem.key}
+          onClose={() => setRemoveKey(null)}
+          exercise={removeItem.exercise}
+          original={removeItem.original}
+          planExerciseId={removeItem.original ? removeItem.key : null}
+          exerciseLogId={removeItem.log?.id ?? null}
+          loggedSets={removeItem.log?.sets.length ?? 0}
+          plan={plan}
         />
       )}
 
@@ -313,8 +335,11 @@ function FinishSheet({ open, onClose, session }: { open: boolean; onClose: () =>
     setSaving(true);
     try {
       useRestTimer.getState().stop();
+      // Satzzeiten für Health Connect merken (die Historie speichert sie nicht)
+      rememberSetTimes(session.exercises.flatMap((e) => e.sets));
       const result = await completeWorkout({ db: getDb(), workout: workoutStore, plans: planStore, sessionRpe: rpe });
       useCompletion.getState().setResult(result);
+      if (isAndroidApp()) void useHealthSync.getState().exportWorkouts();
       onClose();
     } finally {
       setSaving(false);

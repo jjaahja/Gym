@@ -30,6 +30,8 @@ export function proposalTitle(p: Pick<AdaptationProposal, "type" | "muscle" | "b
     }
     case "deload":
       return "Leichtere Woche (Deload)";
+    case "remove_exercise":
+      return `${getExercise(String(p.before.exercise_slug))?.nameDe ?? "Übung"} aus dem Plan entfernt`;
     case "add_set":
     case "remove_set": {
       const muscle = p.muscle ? shortName(getMuscle(p.muscle).nameDe) : "Volumen";

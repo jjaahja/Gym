@@ -40,10 +40,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Health Connect: nur Gewicht und Körperfett lesen (+ Messungen älter als 30 Tage beim ersten Abgleich) -->
+    <!-- Health Connect: Gewicht und Körperfett lesen (+ Messungen älter als 30 Tage beim ersten Abgleich) -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- Trainings speichern: Einheit mit Sätzen und geschätzten aktiven Kalorien -->
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+    <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
 
     <!-- Das Plugin deklariert alle Datentypen; die App braucht sie nicht -->
     <uses-permission android:name="android.permission.health.READ_STEPS" tools:node="remove" />
@@ -53,7 +56,6 @@
     <uses-permission android:name="android.permission.health.READ_DISTANCE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" tools:node="remove" />
-    <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" tools:node="remove" />

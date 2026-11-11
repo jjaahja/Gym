@@ -1,7 +1,7 @@
 "use client";
 
 import { ExerciseVideo, hasVideo } from "@/components/exercise-video";
-import { PlayIcon, SwapIcon } from "@/components/icons";
+import { PencilIcon, PlayIcon, SwapIcon, TrashIcon } from "@/components/icons";
 import { Sheet } from "@/components/sheet";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import { lastPerformance } from "@/lib/offline/history";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { formatGuidelineMessage, resolveExerciseGuidelines, resolveMuscleGuidelines } from "@/lib/science";
 import { formatEffort, rirToRpe } from "@/lib/training/effort";
+import { suggestLoad, type LoadSuggestion } from "@/lib/training/load-suggestion";
 import { suggestNextSet } from "@/lib/training/progression";
 import { muscleVolume, TECHNIQUE_SET_TYPES } from "@/lib/training/volume";
 import { formatWeight, fromDisplayWeight, kgToLb, toDisplayWeight, weightUnitLabel } from "@/lib/units";
@@ -69,6 +70,8 @@ export function ExerciseCard({
   onNext,
   onSwap,
   substitutedFor = null,
+  deload = false,
+  onRemove,
 }: {
   exercise: Exercise;
   planned: StoredPlanExercise | null;
@@ -87,8 +90,12 @@ export function ExerciseCard({
   onSwap?: () => void;
   /** heute ersetzt – Originalübung laut Plan */
   substitutedFor?: Exercise | null;
+  /** Deload-Woche: Gewichte bleiben, kein Vorschlag Richtung Versagen */
+  deload?: boolean;
+  /** Übung aus dem heutigen Training entfernen (Dialog) */
+  onRemove?: () => void;
 }) {
-  const { unitSystem: unit, effortScale: scale } = useSettings();
+  const { unitSystem: unit, effortScale: scale, loadTarget } = useSettings();
   const guidelines = resolveExerciseGuidelines(exercise, goal, experience);
   const p: Prescription = planned
     ? {
@@ -110,17 +117,39 @@ export function ExerciseCard({
         technique: null,
       };
 
-  const last = useLiveQuery(() => lastPerformance(getDb(), exercise.id, sessionId), [exercise.id, sessionId], null);
+  const weighted = exercise.trackingType === "weight_reps" || !exercise.equipment.includes("resistance_band");
+  const timed = exercise.trackingType === "duration";
+  // undefined = lädt noch (damit das Gewichtsfeld nach dem Laden den Vorschlag übernimmt)
+  const last = useLiveQuery(() => lastPerformance(getDb(), exercise.id, sessionId), [exercise.id, sessionId], undefined);
   const lastWorking = last?.sets.filter((s) => s.setType === "working") ?? [];
   const lastTop = lastWorking.length ? Math.max(...lastWorking.map((s) => s.weightKg ?? 0)) : null;
 
   const sets = log?.sets ?? [];
   const working = sets.filter((s) => s.setType === "working");
   const done = working.length >= p.sets;
-  const suggestion = suggestNextSet(
-    { repsMin: p.repsMin, repsMax: p.repsMax, rirMin: p.rirMin, rirMax: p.rirMax, targetLoadKg: planned?.targetLoadKg ?? lastTop, loadIncrementKg: exercise.loadIncrementKg },
-    sets,
-  );
+  // Gewicht aus der bisherigen Leistung (nicht in der Deload-Woche und nicht bei Körpergewichtsübungen mit Zusatzlast)
+  const load: LoadSuggestion | null =
+    !deload && exercise.trackingType === "weight_reps" && !timed
+      ? suggestLoad({
+          mode: loadTarget,
+          repsMin: p.repsMin,
+          repsMax: p.repsMax,
+          rirMin: p.rirMin,
+          rirMax: p.rirMax,
+          sets: p.sets,
+          loadIncrementKg: exercise.loadIncrementKg,
+          targetLoadKg: planned?.targetLoadKg ?? null,
+          heavyCompound: exercise.mechanic === "compound" && (exercise.systemicFatigue >= 4 || exercise.equipment.includes("barbell")),
+          previous: lastWorking,
+          today: sets,
+        })
+      : null;
+  const suggestion = load
+    ? { weightKg: load.weightKg, reason: load.reason }
+    : suggestNextSet(
+        { repsMin: p.repsMin, repsMax: p.repsMax, rirMin: p.rirMin, rirMax: p.rirMax, targetLoadKg: planned?.targetLoadKg ?? lastTop, loadIncrementKg: exercise.loadIncrementKg },
+        sets,
+      );
 
   const techniqueDone = sets.some((s) => TECHNIQUE_SET_TYPES.includes(s.setType));
   const [mode, setMode] = useState<"working" | "warmup" | "technique">("working");
@@ -133,8 +162,6 @@ export function ExerciseCard({
     .map((m) => ({ m, cap: resolveMuscleGuidelines(m, goal, experience).session_volume?.max ?? 10, sets: today.get(m)?.direct ?? 0 }))
     .filter((x) => x.sets >= x.cap);
 
-  const weighted = exercise.trackingType === "weight_reps" || !exercise.equipment.includes("resistance_band");
-  const timed = exercise.trackingType === "duration";
 
   return (
     <section className={`rounded-2xl border bg-surface ${expanded ? "border-accent" : "border-border"}`}>
@@ -166,7 +193,7 @@ export function ExerciseCard({
               Heute statt {substitutedFor.nameDe}
             </span>
           )}
-          {(onSwap || hasVideo(exercise.slug)) && (
+          {(onSwap || onRemove || hasVideo(exercise.slug)) && (
             <div className="flex flex-wrap gap-2">
               {hasVideo(exercise.slug) && (
                 <button
@@ -184,6 +211,15 @@ export function ExerciseCard({
                   className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium"
                 >
                   <SwapIcon className="size-4" /> Übung tauschen
+                </button>
+              )}
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium text-danger"
+                >
+                  <TrashIcon className="size-4" /> Entfernen
                 </button>
               )}
             </div>
@@ -295,14 +331,15 @@ export function ExerciseCard({
           </div>
 
           <SetEntry
-            key={`${sets.length}-${nextType}`}
+            key={`${sets.length}-${nextType}-${last === undefined ? "laden" : "bereit"}-${loadTarget}`}
             exercise={exercise}
             unit={unit}
             scale={scale}
             weighted={weighted}
             timed={timed}
             setType={nextType}
-            repsHint={`${p.repsMin}–${p.repsMax}`}
+            repsHint={nextType === "working" && load?.expectedReps ? String(load.expectedReps) : `${p.repsMin}–${p.repsMax}`}
+            target={nextType === "working" && load?.weightKg != null ? load : null}
             defaultWeightKg={nextType === "warmup" ? (suggestion.weightKg ? Math.round((suggestion.weightKg * 0.5) / exercise.loadIncrementKg) * exercise.loadIncrementKg : null) : suggestion.weightKg}
             suggestionReason={nextType === "working" && working.length > 0 ? suggestion.reason : null}
             onLogged={(type) => {
@@ -352,6 +389,7 @@ function SetEntry({
   repsHint,
   defaultWeightKg,
   suggestionReason,
+  target,
   onLogged,
   ensureLog,
 }: {
@@ -364,6 +402,8 @@ function SetEntry({
   repsHint: string;
   defaultWeightKg: number | null;
   suggestionReason: string | null;
+  /** Ziel für den nächsten Arbeitssatz (Gewichtsvorschlag aus der bisherigen Leistung) */
+  target: LoadSuggestion | null;
   onLogged: (type: SetType) => void;
   ensureLog: () => string;
 }) {
@@ -432,6 +472,14 @@ function SetEntry({
         />
       </div>
 
+      {target && (
+        <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm">
+          <span className="font-semibold">
+            {target.lastSet && target.targetRir === 0 ? "Letzter Satz: bis zum Versagen" : `Ziel: ${target.effortLabel}`}
+          </span>
+          {target.expectedReps != null && <span className="text-muted"> · ca. {target.expectedReps} Wdh. mit {formatWeight(target.weightKg!, unit)}</span>}
+        </p>
+      )}
       {suggestionReason && <p className="text-xs text-muted">Vorschlag: {suggestionReason}</p>}
 
       {!timed && setType !== "warmup" && (
@@ -490,17 +538,26 @@ function NumberField({
     <label className="block text-sm font-medium">
       {label}
       <div className="mt-1 flex items-stretch overflow-hidden rounded-xl border border-border bg-surface focus-within:border-accent">
-        <button type="button" onClick={onMinus} aria-label={`${label} verringern`} className="min-w-11 text-xl text-muted">
+        <button type="button" onClick={onMinus} aria-label={`${label} verringern`} className="min-w-10 shrink-0 text-xl text-muted">
           −
         </button>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          inputMode={inputMode}
-          placeholder={placeholder}
-          className="tabular min-h-12 w-full min-w-0 bg-transparent text-center text-lg font-semibold outline-none"
-        />
-        <button type="button" onClick={onPlus} aria-label={`${label} erhöhen`} className="min-w-11 text-xl text-muted">
+        {/* Sichtbares Eingabefeld: Antippen markiert die Zahl, sodass man sie direkt überschreibt */}
+        <span className="relative my-1.5 flex min-w-0 flex-1">
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={(e) => {
+              const input = e.currentTarget;
+              requestAnimationFrame(() => input.select());
+            }}
+            inputMode={inputMode}
+            enterKeyHint="done"
+            placeholder={placeholder}
+            className="peer tabular min-h-10 w-full min-w-0 rounded-lg border border-dashed border-border bg-surface-2 pl-1 pr-3.5 text-center text-lg font-semibold outline-none focus:border-solid focus:border-accent focus:bg-surface focus:px-1"
+          />
+          <PencilIcon aria-hidden="true" className="pointer-events-none absolute right-1 top-1 size-3 text-muted peer-focus:hidden" />
+        </span>
+        <button type="button" onClick={onPlus} aria-label={`${label} erhöhen`} className="min-w-10 shrink-0 text-xl text-muted">
           +
         </button>
       </div>

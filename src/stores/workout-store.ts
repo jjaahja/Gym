@@ -41,6 +41,8 @@ export interface ActiveSession {
   deload?: boolean;
   /** Nur heute getauschte Planübungen: planExerciseId → exerciseId */
   substitutions?: Record<string, string>;
+  /** Heute weggelassene Planübungen (planExerciseId) */
+  skipped?: string[];
   startedAt: string;
   exercises: LoggedExercise[];
 }
@@ -71,6 +73,11 @@ export interface WorkoutState {
    * eingetragen ist – sonst würden Sätze unterschiedlicher Übungen vermischt.
    */
   substitute(planExerciseId: string, exerciseId: string | null): void;
+  /**
+   * Übung aus dem heutigen Training entfernen – samt eingetragenen Sätzen (Server: exercise_logs löschen,
+   * set_logs folgen per Fremdschlüssel). Planübungen werden für heute ausgeblendet.
+   */
+  removeExercise(target: { planExerciseId?: string | null; exerciseLogId?: string | null }): void;
   logSet(exerciseLogId: string, input: SetInput): string;
   updateSet(exerciseLogId: string, setId: string, input: Partial<SetInput>): void;
   removeSet(exerciseLogId: string, setId: string): void;
@@ -225,7 +232,8 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               id: uuid(),
               exerciseId,
               planExerciseId,
-              orderIndex: session.exercises.length,
+              // nach dem Entfernen einer Übung keine Position doppelt vergeben
+              orderIndex: session.exercises.reduce((max, e) => Math.max(max, e.orderIndex + 1), 0),
               pumpRating: null,
               jointDiscomfort: null,
               sets: [],
@@ -256,6 +264,21 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
               emit(next, { table: "exercise_logs", op: "upsert", rowId: updated.id, payload: exerciseRow(next.id, updated) });
             }
             set({ session: next });
+          },
+
+          removeExercise({ planExerciseId = null, exerciseLogId = null }) {
+            const session = requireSession();
+            const log = session.exercises.find((e) => (exerciseLogId ? e.id === exerciseLogId : planExerciseId != null && e.planExerciseId === planExerciseId));
+            const substitutions = { ...(session.substitutions ?? {}) };
+            if (planExerciseId) delete substitutions[planExerciseId];
+            const next: ActiveSession = {
+              ...session,
+              substitutions,
+              skipped: planExerciseId ? [...new Set([...(session.skipped ?? []), planExerciseId])] : session.skipped,
+              exercises: log ? session.exercises.filter((e) => e.id !== log.id) : session.exercises,
+            };
+            set({ session: next });
+            if (log) emit(next, { table: "exercise_logs", op: "delete", rowId: log.id, payload: { id: log.id } });
           },
 
           ensureExercise(exerciseId, planExerciseId = null) {

@@ -17,7 +17,8 @@ import {
   type MuscleVolume,
   type PlannedExercise,
 } from "@/lib/training/plan-generator";
-import { buildSwapProposal, type AdaptationProposal } from "@/lib/training/progression";
+import { getGuideline } from "@/lib/science";
+import { ADAPTATION_MODE, buildSwapProposal, type AdaptationProposal } from "@/lib/training/progression";
 import type { Weekday } from "@/lib/training/schedule";
 
 // Aktiver Trainingsplan – lokal gespeichert (offline, Demo-Modus) und als DB-Zeilen synchronisiert.
@@ -124,6 +125,8 @@ export interface PlanState {
   completeMesocycle(decision: MesocycleDecision): AdaptationRecord[];
   /** Übung im Plan dauerhaft ersetzen (vom Nutzer gewählt) – rückgängig über das Protokoll */
   swapExercise(planExerciseId: string, replacementSlug: string): AdaptationRecord | null;
+  /** Übung dauerhaft aus dem Plan entfernen (vom Nutzer gewählt) – rückgängig über das Protokoll */
+  removeExercise(planExerciseId: string): AdaptationRecord | null;
   /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
   setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
   /**
@@ -574,6 +577,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
               target_load_kg?: number | null;
               sets?: Record<string, number>;
               plan_exercise?: StoredPlanExercise;
+              plan_day_id?: string;
               previous_last_deload_at?: string | null;
               previous_deload_week_start?: string | null;
               previous_cycle_started_at?: string;
@@ -585,6 +589,17 @@ export function createPlanStore(deps: PlanStoreDeps) {
             } else if (r.type === "swap_exercise" && r.planExerciseId && before.plan_exercise) {
               const previous = before.plan_exercise;
               updateExercises(new Map([[r.planExerciseId, () => previous]]));
+            } else if (r.type === "remove_exercise" && before.plan_exercise && before.plan_day_id) {
+              // wieder an ihrer alten Position einfügen
+              const previous = before.plan_exercise;
+              const dayId = before.plan_day_id;
+              if (findPlanExercise(plan, previous.id) || !plan.days.some((d) => d.id === dayId)) return;
+              const days = plan.days.map((d) =>
+                d.id === dayId ? { ...d, exercises: [...d.exercises, previous].sort((a, b) => a.orderIndex - b.orderIndex) } : d,
+              );
+              const nextPlan = withPlannedVolume({ ...plan, days });
+              set({ plan: nextPlan });
+              emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: previous.id, payload: planExerciseRow(dayId, previous) });
             } else if (r.type === "deload") {
               set({
                 plan: {
@@ -662,6 +677,36 @@ export function createPlanStore(deps: PlanStoreDeps) {
             const proposal = buildSwapProposal(current, replacement, "user_request");
             const done = accept(record(plan, { ...proposal, status: "suggested" }, planExerciseId));
             return done ? save(done) : null;
+          },
+
+          removeExercise(planExerciseId) {
+            const plan = get().plan;
+            const found = plan ? findPlanExercise(plan, planExerciseId) : null;
+            if (!plan || !found) return null;
+            const name = getExercise(found.exercise.exerciseSlug)?.nameDe ?? "Übung";
+            // Protokoll zuerst (ohne plan_exercise_id: die Zeile wird gleich gelöscht), dann die Planübung
+            const r = save(
+              record(
+                plan,
+                {
+                  type: "remove_exercise",
+                  reason: "user_request",
+                  status: ADAPTATION_MODE.remove_exercise,
+                  before: { plan_exercise: found.exercise, plan_day_id: found.day.id, exercise_slug: found.exercise.exerciseSlug },
+                  after: {},
+                  guidelineKey: getGuideline("exercise_variation.planned").key,
+                  explanation: `${name} auf deinen Wunsch aus „${found.day.name}“ entfernt.`,
+                },
+                null,
+              ),
+            );
+            const days = plan.days.map((d) =>
+              d.id === found.day.id ? { ...d, exercises: d.exercises.filter((e) => e.id !== planExerciseId) } : d,
+            );
+            const nextPlan = withPlannedVolume({ ...plan, days });
+            set({ plan: nextPlan });
+            emit(nextPlan, { table: "plan_exercises", op: "delete", rowId: planExerciseId, payload: { id: planExerciseId } });
+            return r;
           },
 
           setWeekdays(weekdays) {

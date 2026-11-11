@@ -400,3 +400,79 @@ describe("Übung tauschen", () => {
     });
   });
 });
+
+describe("Übung im Training entfernen", () => {
+  it("nur heute: Sätze weg (Server: exercise_logs löschen), Planübung für heute ausgeblendet, Plan unverändert", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const day = plan.days[0];
+    const [first, second] = day.exercises;
+    ctx.workout.getState().start({ userId: "user-1", planId: plan.id, planDayId: day.id });
+    const log = ctx.workout.getState().ensureExercise(first.exerciseId, first.id);
+    ctx.workout.getState().logSet(log, { weightKg: 50, reps: 10, rir: 2 });
+    ctx.entries.length = 0;
+
+    ctx.workout.getState().removeExercise({ planExerciseId: first.id, exerciseLogId: log });
+    const session = ctx.workout.getState().session!;
+    expect(session.exercises).toEqual([]);
+    expect(session.skipped).toEqual([first.id]);
+    expect(ctx.entries).toEqual([{ table: "exercise_logs", op: "delete", rowId: log, payload: { id: log } }]);
+    expect(ctx.plans.getState().plan).toEqual(plan);
+
+    // Neue Übung danach bekommt keine schon vergebene Position
+    const other = ctx.workout.getState().ensureExercise(second.exerciseId, second.id);
+    const extra = ctx.workout.getState().addExercise(getExercise("plank")!.id);
+    const positions = ctx.workout.getState().session!.exercises.map((e) => e.orderIndex);
+    expect(new Set(positions).size).toBe(positions.length);
+    expect([other, extra]).toHaveLength(2);
+  });
+
+  it("aus dem Plan: Protokoll vor dem Löschen der Planübung, Volumen neu, rückgängig an alter Position", () => {
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const day = plan.days[0];
+    const pe = day.exercises[1];
+    ctx.plans.getState().setTargetLoad(pe.id, 40);
+    const before = ctx.plans.getState().plan!;
+    ctx.entries.length = 0;
+
+    const record = ctx.plans.getState().removeExercise(pe.id)!;
+    expect(record).toMatchObject({ type: "remove_exercise", reason: "user_request", status: "accepted", planExerciseId: null });
+    expect(record.before).toMatchObject({ plan_day_id: day.id, exercise_slug: pe.exerciseSlug, plan_exercise: { id: pe.id, targetLoadKg: 40 } });
+    expect(ctx.entries.map((e) => `${e.table}:${e.op}`)).toEqual(["plan_adaptations:upsert", "plan_exercises:delete"]);
+    const after = ctx.plans.getState().plan!;
+    expect(after.days[0].exercises.map((e) => e.id)).not.toContain(pe.id);
+    expect(after.days[0].estimatedMinutes).toBeLessThan(before.days[0].estimatedMinutes);
+    expect(ctx.plans.getState().removeExercise(pe.id)).toBeNull(); // schon weg
+
+    ctx.plans.getState().revertAdaptation(record.id);
+    const restored = ctx.plans.getState().plan!;
+    expect(restored.days[0].exercises.map((e) => e.id)).toEqual(before.days[0].exercises.map((e) => e.id));
+    expect(restored.days[0].exercises[1]).toMatchObject({ id: pe.id, targetLoadKg: 40 });
+    expect(restored.volume).toEqual(before.volume);
+    expect(ctx.entries.at(-2)).toMatchObject({ table: "plan_exercises", op: "upsert", rowId: pe.id });
+    expect(ctx.plans.getState().adaptations.find((a) => a.id === record.id)?.status).toBe("reverted");
+  });
+
+  it("warnt, wenn ein Muskel danach unter den Wochen-Richtwert fällt – sonst nicht", async () => {
+    const { removalWarnings } = await import("@/lib/training/removal");
+    const ctx = setup();
+    const plan = ctx.plans.getState().createPlan({ userId: "user-1", assessment, generated: ctx.generated });
+    const chestPrimary = (slug: string) => getExercise(slug)!.muscles.some((m) => m.role === "primary" && m.muscle === "chest");
+    const chestIds = plan.days.flatMap((d) => d.exercises).filter((e) => chestPrimary(e.exerciseSlug)).map((e) => e.id);
+    expect(chestIds.length).toBeGreaterThan(1);
+
+    // Plan mit nur noch einer Brustübung: Wer die entfernt, fällt unter 10 Sätze/Woche
+    const [last, ...others] = chestIds;
+    const thin = { ...plan, days: plan.days.map((d) => ({ ...d, exercises: d.exercises.filter((e) => !others.includes(e.id)) })) };
+    const warning = removalWarnings(thin, last).find((w) => w.muscle === "chest")!;
+    expect(warning.min).toBe(10);
+    expect(warning.after).toBeLessThan(warning.before);
+    expect(warning.after).toBeLessThan(10);
+    expect(warning.after).toBe(Math.round((planVolume(thin.days.map((d) => ({ ...d, exercises: d.exercises.filter((e) => e.id !== last) }))).get("chest") ?? 0) * 10) / 10);
+
+    // Übung, deren Muskeln im vollen Plan genug Volumen behalten → keine Warnung für diese Muskeln
+    for (const id of plan.days.flatMap((d) => d.exercises).map((e) => e.id))
+      for (const w of removalWarnings(plan, id)) expect(w.after).toBeLessThan(w.min);
+  });
+});

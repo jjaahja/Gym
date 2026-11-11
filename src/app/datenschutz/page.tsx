@@ -8,7 +8,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 [&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:mt-1 [&_p]:mt-2 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">
       <h1 className="text-2xl font-bold">Datenschutz</h1>
-      <p className="text-muted">Stand: 6. November 2026</p>
+      <p className="text-muted">Stand: 11. November 2026</p>
       <p>
         Diese App ist ein privat betriebener Trainingsplaner. Sie verarbeitet nur die Daten, die für Trainingsplan,
         Fortschritt und Abgleich zwischen deinen Geräten nötig sind. Es gibt keine Werbung, kein Tracking und keinen
@@ -26,7 +26,13 @@ export default function PrivacyPage() {
       <ul>
         <li>
           Nur nach deiner ausdrücklichen Erlaubnis liest die App <strong>Gewicht</strong> und <strong>Körperfettanteil</strong>{" "}
-          aus Health Connect – sonst keine Gesundheitsdaten. Die App schreibt nichts in Health Connect.
+          aus Health Connect – sonst keine Gesundheitsdaten.
+        </li>
+        <li>
+          Nur wenn du „Trainings speichern“ einschaltest, schreibt die App deine Trainings in Health Connect: Start, Ende,
+          Name des Trainingstags, je Satz die Übung und die Wiederholungen sowie geschätzte aktive Kalorien (aus Dauer,
+          Körpergewicht und Intensität). Andere Apps, denen du in Health Connect Zugriff gibst, können diese Trainings
+          sehen.
         </li>
         <li>
           Zweck: Die Werte erscheinen in deinen Körpermaßen und in den Fortschrittsdiagrammen (pro Tag die letzte
@@ -35,8 +41,9 @@ export default function PrivacyPage() {
         </li>
         <li>Die Daten werden nicht an Dritte weitergegeben und nicht für Werbung oder Analysen genutzt.</li>
         <li>
-          Widerruf: in der App unter Fortschritt → Körper → „Abgleich beenden“ und in den Health-Connect-Einstellungen
-          deines Telefons. Übernommene Messungen kannst du in der App einzeln löschen.
+          Widerruf: in der App unter Fortschritt → Körper → „Abgleich beenden“ bzw. „Speichern beenden“ und in den
+          Health-Connect-Einstellungen deines Telefons. Übernommene Messungen kannst du in der App einzeln löschen,
+          gespeicherte Trainings in Health Connect.
         </li>
       </ul>
 

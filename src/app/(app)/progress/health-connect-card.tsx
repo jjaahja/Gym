@@ -24,6 +24,7 @@ export function HealthConnectCard() {
   // Server und Browser rendern beide nichts ("checking"/"web") – kein Hydration-Unterschied
   const [status, setStatus] = useState<Availability | "checking" | "web">(() => (isAndroidApp() ? "checking" : "web"));
   const { connected, lastSync, syncing, error, lastResult, denied } = useHealthSync();
+  const available = status !== "web" && status !== "checking" && status.available;
 
   useEffect(() => {
     if (!isAndroidApp()) return;
@@ -131,6 +132,70 @@ export function HealthConnectCard() {
           )}
         </div>
       )}
+      {available && <WorkoutExport />}
     </Card>
+  );
+}
+
+/** Trainings in Health Connect speichern (Einheit + Sätze + geschätzte Kalorien). */
+function WorkoutExport() {
+  const { writeSupported, writeEnabled, writtenCount, exporting, lastExport, writeError, caloriesDenied } = useHealthSync();
+  if (writeSupported === null) return null;
+  return (
+    <div className="mt-4 space-y-3 border-t border-border pt-4">
+      <div>
+        <h3 className="font-semibold">Trainings speichern</h3>
+        <p className="text-sm text-muted">
+          {writeEnabled
+            ? `Aktiv · ${writtenCount === 1 ? "1 Training" : `${writtenCount} Trainings`} übertragen`
+            : "Jedes Training als Krafttraining in Health Connect – sichtbar z. B. in Google Fit oder Samsung Health."}
+        </p>
+      </div>
+
+      {!writeSupported ? (
+        <p className="rounded-lg bg-surface-2 p-3 text-sm">
+          Dafür brauchst du die neue App-Version (1.1). Installiere sie einfach über die bisherige – deine Daten bleiben.
+        </p>
+      ) : writeEnabled ? (
+        <>
+          {exporting && <p className="text-sm text-muted">Übertrage …</p>}
+          {lastExport && lastExport.written > 0 && (
+            <p className="text-sm text-muted" role="status">
+              {lastExport.written === 1 ? "1 Training" : `${lastExport.written} Trainings`} übertragen
+              {lastExport.withoutCalories > 0 && " – ohne Kalorien: trag dein Körpergewicht ein, dann werden sie geschätzt"}.
+            </p>
+          )}
+          {caloriesDenied && <p className="text-sm text-muted">Kalorien sind in Health Connect nicht erlaubt – es werden nur die Trainings gespeichert.</p>}
+          {writeError && (
+            <p className="text-sm text-danger" role="alert">
+              {writeError}
+            </p>
+          )}
+          <button
+            type="button"
+            className="min-h-10 w-full text-sm font-medium text-muted underline-offset-4 hover:underline"
+            onClick={() => useHealthSync.getState().disableWrite()}
+          >
+            Speichern beenden
+          </button>
+        </>
+      ) : (
+        <>
+          <ul className="space-y-1 text-sm text-muted">
+            <li>• Je Training: Start, Ende, Name und jeder Satz mit Übung und Wiederholungen (Gewichte kennt Health Connect nicht).</li>
+            <li>• Kalorien geschätzt aus Dauer, Körpergewicht und Intensität – grob, oft ±30–50 %.</li>
+            <li>• Die Trainings der letzten 30 Tage werden nachgetragen, danach jedes neue automatisch.</li>
+          </ul>
+          {writeError && (
+            <p className="text-sm text-danger" role="alert">
+              {writeError}
+            </p>
+          )}
+          <button type="button" className={`${buttonStyles.secondary} w-full`} onClick={() => void useHealthSync.getState().enableWrite()}>
+            Trainings in Health Connect speichern
+          </button>
+        </>
+      )}
+    </div>
   );
 }

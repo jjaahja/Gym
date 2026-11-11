@@ -10,7 +10,8 @@ Android-App.
 - **Hülle um die Web-App:** Die App lädt die veröffentlichte Version (`server.url` →
   `https://gym-alpha-flax.vercel.app`). Updates der App kommen also wie bisher ohne neue APK; eine neue APK ist nur
   nötig, wenn sich am nativen Teil etwas ändert.
-- **Nativer Teil:** nur das Health-Connect-Plugin (`@capgo/capacitor-health`). Capacitor spielt die Brücke beim Laden
+- **Nativer Teil:** das Health-Connect-Plugin (`@capgo/capacitor-health`, Lesen) und ab App 1.1 das eigene Plugin
+  `GymHealth` (Trainings schreiben, siehe [10](10-gewichtsvorschlag-entfernen-trainings-health.md)). Capacitor spielt die Brücke beim Laden
   der Seite ein (`window.Capacitor`); die Web-App erkennt daran die Android-App (`isAndroidApp`).
 - **Berechtigungen** (`android/app/src/main/AndroidManifest.xml`): Internet, `READ_WEIGHT`, `READ_BODY_FAT` und
   `READ_HEALTH_DATA_HISTORY` (Messungen älter als 30 Tage beim ersten Abgleich). Das Plugin deklariert alle 45

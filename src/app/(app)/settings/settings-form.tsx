@@ -23,7 +23,7 @@ async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: Eff
 }
 
 export function SettingsForm() {
-  const { unitSystem, effortScale, setUnitSystem, setEffortScale } = useSettings();
+  const { unitSystem, effortScale, loadTarget, setUnitSystem, setEffortScale, setLoadTarget } = useSettings();
   const { pending, syncing, lastError, lastSyncedAt, pulling, lastPulledAt, pullError } = useSyncStatus();
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
@@ -43,6 +43,7 @@ export function SettingsForm() {
     await getDb().measurements.clear();
     resetDeviceSync();
     useHealthSync.getState().disconnect();
+    useHealthSync.getState().disableWrite();
     workoutStore.setState({ session: null });
     planStore.getState().clear();
     await supabase.auth.signOut();
@@ -81,6 +82,22 @@ export function SettingsForm() {
             {effortScale === "rir"
               ? "RIR = Wiederholungen im Tank: Wie viele hättest du noch geschafft? RIR 2 heißt: 2 wären noch gegangen."
               : "RPE = gefühlte Anstrengung von 1–10. RPE 8 entspricht 2 Wiederholungen im Tank (RPE = 10 − RIR)."}
+          </p>
+        </div>
+        <div>
+          <Segmented
+            label="Gewichtsvorschlag im Training"
+            value={loadTarget}
+            onChange={setLoadTarget}
+            options={[
+              { value: "failure_last_set", label: "Versagen im letzten Satz" },
+              { value: "plan", label: "Plan-Ziel" },
+            ]}
+          />
+          <p className="mt-2 text-sm text-muted">
+            {loadTarget === "failure_last_set"
+              ? "Das Gewicht wird aus deinen letzten Sätzen berechnet: frühe Sätze mit 1–2 Wiederholungen im Tank, der letzte bis zum Muskelversagen. Bei schweren Grundübungen (z. B. Kniebeuge, Kreuzheben, Bankdrücken) bleibt im letzten Satz 1 im Tank – sicherer, kaum weniger Effekt."
+              : "Das Gewicht wird aus deinen letzten Sätzen berechnet, Ziel ist in jedem Satz der Bereich aus deinem Plan (z. B. 1–3 Wiederholungen im Tank)."}
           </p>
         </div>
       </Card>

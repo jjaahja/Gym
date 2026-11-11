@@ -3,9 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DB_ENUMS } from "./enums";
 
-// Liest alle `create type public.x as enum (...)` aus den Migrationen.
-// Hinweis: Spätere `alter type ... add value`-Migrationen werden hier nicht erkannt –
-// dann diesen Parser erweitern.
+// Liest alle `create type public.x as enum (...)` aus den Migrationen – und spätere
+// `alter type public.x add value [if not exists] 'v'` (angehängt, in Reihenfolge der Migrationen).
 function parseSqlEnums(): Record<string, string[]> {
   const dir = join(process.cwd(), "supabase/migrations");
   const sql = readdirSync(dir)
@@ -18,6 +17,9 @@ function parseSqlEnums(): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   for (const match of sql.matchAll(/create type public\.(\w+) as enum \(([\s\S]*?)\);/g)) {
     result[match[1]] = [...match[2].matchAll(/'([^']+)'/g)].map((v) => v[1]);
+  }
+  for (const match of sql.matchAll(/alter type public\.(\w+) add value (?:if not exists )?'([^']+)'/g)) {
+    if (!result[match[1]].includes(match[2])) result[match[1]].push(match[2]);
   }
   return result;
 }

@@ -51,6 +51,8 @@ export const ADAPTATION_MODE: Record<AdaptationType, AdaptationStatus> = {
   change_rep_range: "suggested",
   swap_exercise: "suggested",
   deload: "suggested",
+  // nur auf Wunsch im Training – sofort wirksam
+  remove_exercise: "accepted",
 };
 
 const de = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 2 });

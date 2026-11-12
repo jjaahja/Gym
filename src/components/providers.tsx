@@ -8,6 +8,7 @@ import { isAndroidApp } from "@/lib/health/health-connect";
 import { useHealthExtras } from "@/lib/health/extras";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 import { watchReminders } from "@/lib/reminders";
+import { installErrorCapture } from "@/lib/error-log";
 import { getDb } from "@/lib/offline/db";
 import { syncDevice } from "@/lib/offline/device-sync";
 import { useSyncStatus } from "@/lib/offline/sync";
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SyncManager />
       <HealthConnectSync />
       <ReminderSync />
+      <ErrorCapture />
       <AppUpdateCheck />
       <ServiceWorkerRegistration />
       {children}
@@ -125,5 +127,11 @@ function ReminderSync() {
     if (!isAndroidApp()) return;
     return watchReminders();
   }, []);
+  return null;
+}
+
+/** Fehler lokal mitschreiben (gesendet wird nur auf Knopfdruck im Profil). */
+function ErrorCapture() {
+  useEffect(() => installErrorCapture(), []);
   return null;
 }

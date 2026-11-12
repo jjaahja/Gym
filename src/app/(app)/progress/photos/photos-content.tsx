@@ -9,6 +9,7 @@ import { listMeasurements } from "@/lib/offline/measurements";
 import { writeToOutbox } from "@/lib/offline/sink";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { addPhoto, comparisonPair, deletePhoto, measurementNear, POSES, spanLabel } from "@/lib/photos";
+import { saveFile } from "@/lib/native/device";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { formatWeight } from "@/lib/units";
 import { usePhotoUrl } from "@/lib/use-photo-url";
@@ -121,6 +122,14 @@ function Viewer({ photo, onClose }: { photo: ProgressPhoto; onClose: () => void 
           <div className="aspect-[3/4] animate-pulse" />
         )}
       </div>
+      <button
+        type="button"
+        className={`${buttonStyles.secondary} mt-4 w-full`}
+        disabled={!photo.blob}
+        onClick={() => photo.blob && void saveFile(`fortschritt-${photo.takenOn}-${photo.pose}.jpg`, photo.blob)}
+      >
+        Foto speichern
+      </button>
       {confirm ? (
         <div className="mt-4 space-y-2">
           <p className="text-[0.9375rem]">Foto endgültig löschen – auf allen Geräten?</p>
@@ -132,7 +141,7 @@ function Viewer({ photo, onClose }: { photo: ProgressPhoto; onClose: () => void 
           </button>
         </div>
       ) : (
-        <button type="button" className={`${buttonStyles.danger} mt-4 w-full`} onClick={() => setConfirm(true)}>
+        <button type="button" className={`${buttonStyles.danger} mt-2 w-full`} onClick={() => setConfirm(true)}>
           Foto löschen
         </button>
       )}

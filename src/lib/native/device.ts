@@ -10,6 +10,8 @@ const ASKED_KEY = "gym-notify-asked";
 type LocalNotificationsPlugin = typeof import("@capacitor/local-notifications").LocalNotifications;
 interface GymDevicePlugin {
   keepAwake(options: { enabled: boolean }): Promise<void>;
+  /** ab App 1.3 */
+  shareFile(options: { name: string; mime: string; data: string }): Promise<void>;
 }
 
 // Plugins als Objekt zurückgeben – ein Proxy direkt aus einer async-Funktion würde als Promise behandelt
@@ -127,4 +129,38 @@ export async function keepAwake(enabled: boolean): Promise<void> {
 /** Nach Rückkehr in den Tab neu anfordern (der Browser gibt die Sperre beim Verlassen frei). */
 export function resetWakeLock() {
   wakeLock = null;
+}
+
+const toBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
+/**
+ * Datei speichern bzw. teilen: In der Android-App über das Teilen-Menü (Web-Downloads gehen dort nicht),
+ * im Browser als Download. Liefert false, wenn die App-Version das noch nicht kann.
+ */
+export async function saveFile(name: string, blob: Blob): Promise<boolean> {
+  if (isAndroidApp()) {
+    const { device: plugin } = await native();
+    try {
+      if (!plugin) return false;
+      await plugin.shareFile({ name, mime: blob.type || "application/octet-stream", data: await toBase64(blob) });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
 }

@@ -101,3 +101,23 @@ Fortschritt → Körper → „Fortschrittsfotos“.
   und Eiweiß im Schnitt.
 - **Erinnerungen** (Profil, Android-App): lokale Benachrichtigung an jedem Trainingstag des Plans zur gewählten
   Uhrzeit; wird bei Änderungen an Uhrzeit, Schalter oder Wochentagen automatisch neu geplant.
+
+## Zuverlässigkeit & Konto
+
+- **Hängende Synchronisierung sichtbar** (`src/lib/sync-health.ts`): Banner, sobald der vorderste Outbox-Eintrag 3-mal
+  scheiterte oder online seit 6 Stunden nichts übertragen wurde. Im Profil: welche Daten hängen, Fehlermeldung,
+  „Erneut versuchen“, Fehlerbericht senden und – nur bei dauerhaften Fehlern (Regelverstoß, ungültige Daten) und mit
+  Bestätigung – „Hängende Änderung verwerfen“, damit alles dahinter wieder fließt. Netzfehler gelten nie als dauerhaft.
+- **Fehlerberichte** (`src/lib/error-log.ts`): Fehler werden lokal mitgeschrieben (höchstens 30); gesendet wird nur auf
+  Knopfdruck in `client_errors` (insert-only, ≤ 8 KB, ohne Trainingsdaten).
+- **Konto & Daten** (Profil): E-Mail, Passwort ändern (`/settings/password`), „Passwort vergessen?“ im Login (Link über
+  `/auth/callback?next=/settings/password`; die erlaubten Weiterleitungen `https://gym-alpha-flax.vercel.app/**` decken
+  das ab), Export als JSON (alles außer Bilddateien) und CSV (alle Sätze, deutsches Format), Konto löschen
+  (Fotos im Speicher, dann `delete_my_account()` – alle Tabellen kaskadieren – dann lokal alles entfernen).
+- **Abmelden** entfernt jetzt alle Daten des Kontos vom Gerät (auch Notizen, Ernährung, Fotos, RIR-Checks,
+  Health-Connect-Status, Erinnerungen).
+- **Dateien in der Android-App** (ab 1.3): Export und „Foto speichern“ laufen über das Teilen-Menü (`GymDevice.shareFile`,
+  FileProvider) – Web-Downloads funktionieren in der App-Ansicht nicht.
+- **APK-Bereitstellung:** Die App lädt Updates von der eigenen Domain (`/downloads/version.json`, SHA-256 geprüft);
+  GitHub (raw) bleibt nur der Weg für die alte Version 1.1. GitHub-Releases lassen sich mit den hier verfügbaren
+  Werkzeugen nicht anlegen – nicht nötig, solange Vercel die Datei ausliefert.

@@ -43,7 +43,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(params.get("error") ? "Anmeldung fehlgeschlagen." : null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(params.get("deleted") ? "Dein Konto und alle Daten wurden gelöscht." : null);
 
   if (!supabase) {
     return (
@@ -88,6 +88,21 @@ export function LoginForm() {
       }
     }
     setBusy(false);
+  }
+
+  async function forgotPassword() {
+    if (!supabase) return;
+    setError(null);
+    setNotice(null);
+    if (!/^\S+@\S+\.\S+$/.test(email)) return setError("Gib zuerst deine E-Mail-Adresse ein.");
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/settings/password`,
+    });
+    setBusy(false);
+    if (error) setError(authErrorMessage(error));
+    // gleiche Antwort, ob es das Konto gibt oder nicht
+    else setNotice("Wenn es ein Konto mit dieser E-Mail gibt, kommt gleich ein Link zum Zurücksetzen.");
   }
 
   return (
@@ -143,6 +158,11 @@ export function LoginForm() {
       <button type="submit" disabled={busy} className={`${buttonStyles.primary} w-full`}>
         {busy ? "Einen Moment …" : mode === "signin" ? "Anmelden" : "Konto erstellen"}
       </button>
+      {mode === "signin" && (
+        <button type="button" disabled={busy} onClick={() => void forgotPassword()} className="min-h-10 w-full text-sm font-medium text-accent">
+          Passwort vergessen?
+        </button>
+      )}
     </form>
   );
 }

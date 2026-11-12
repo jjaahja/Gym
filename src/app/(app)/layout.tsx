@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { BottomNav, NavBar } from "@/components/bottom-nav";
 import { UpdateBanner } from "@/components/app-update";
-import { OfflineBanner } from "@/components/status-banners";
+import { OfflineBanner, SyncProblemBanner } from "@/components/status-banners";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -14,6 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <OfflineBanner />
+        <SyncProblemBanner />
         <UpdateBanner />
       </div>
       <main className="flex-1 px-4 pb-28 pt-6">{children}</main>

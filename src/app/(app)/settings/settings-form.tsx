@@ -5,19 +5,16 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppUpdateCard } from "@/components/app-update";
 import { ThemePicker } from "@/components/theme-picker";
+import { clearLocalData } from "@/lib/account";
 import { ReminderSettings } from "./reminder-settings";
 import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
-import { useHealthSync } from "@/lib/health/use-health-sync";
 import { getDb } from "@/lib/offline/db";
-import { clearHistory } from "@/lib/offline/history";
 import { writeToOutbox } from "@/lib/offline/sink";
-import { resetDeviceSync, syncDevice } from "@/lib/offline/device-sync";
-import { useSyncStatus } from "@/lib/offline/sync";
 import { getCurrentUserId, getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
-import { workoutStore } from "@/stores/workout";
+import { AccountCard } from "./account-card";
+import { SyncCard } from "./sync-card";
 
 /** Anzeige-Einstellungen auch im Profil speichern (geräteübergreifend). */
 async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: EffortScale }) {
@@ -27,7 +24,6 @@ async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: Eff
 
 export function SettingsForm() {
   const { unitSystem, effortScale, loadTarget, setUnitSystem, setEffortScale, setLoadTarget } = useSettings();
-  const { pending, syncing, lastError, lastSyncedAt, pulling, lastPulledAt, pullError } = useSyncStatus();
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -40,15 +36,8 @@ export function SettingsForm() {
       return;
     }
     setSigningOut(true);
-    // Lokale Trainingsdaten gehören zum Konto → beim Abmelden vom Gerät entfernen
-    await getDb().outbox.clear();
-    await clearHistory(getDb());
-    await getDb().measurements.clear();
-    resetDeviceSync();
-    useHealthSync.getState().disconnect();
-    useHealthSync.getState().disableWrite();
-    workoutStore.setState({ session: null });
-    planStore.getState().clear();
+    // Alle Daten des Kontos (auch Fotos, Notizen, Ernährung) gehören zum Konto → beim Abmelden vom Gerät entfernen
+    await clearLocalData();
     await supabase.auth.signOut();
     router.replace("/login");
   }
@@ -108,42 +97,8 @@ export function SettingsForm() {
 
       <ReminderSettings />
 
-      <Card>
-        <h2 className="font-semibold">Synchronisierung</h2>
-        {supabase ? (
-          <>
-            <p className="mt-1 text-sm text-muted">
-              {pending === null
-                ? "Prüfe ausstehende Änderungen …"
-                : pending === 0
-                  ? "Alles synchronisiert."
-                  : syncing
-                    ? `${pending} Änderungen werden übertragen …`
-                    : `${pending} Änderungen warten auf Netz.`}
-              {lastSyncedAt && ` Zuletzt: ${new Date(lastSyncedAt).toLocaleTimeString("de-DE")}.`}
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              {lastPulledAt
-                ? `Stand vom Server geladen: ${new Date(lastPulledAt).toLocaleTimeString("de-DE")}. Plan, Trainings und Körpermaße sind auf allen Geräten gleich.`
-                : "Plan, Trainings und Körpermaße werden beim Start vom Server geladen."}
-            </p>
-            {lastError && <p className="mt-2 text-sm text-danger">Letzter Fehler beim Hochladen: {lastError}</p>}
-            {pullError && <p className="mt-2 text-sm text-danger">Letzter Fehler beim Laden: {pullError}</p>}
-            <button
-              type="button"
-              className={`${buttonStyles.secondary} mt-3 w-full`}
-              disabled={syncing || pulling}
-              onClick={() => void syncDevice({ force: true })}
-            >
-              {syncing || pulling ? "Synchronisiere …" : "Jetzt synchronisieren"}
-            </button>
-          </>
-        ) : (
-          <p className="mt-1 text-sm text-muted">
-            Demo-Modus: Ohne Supabase-Projekt bleiben alle Daten auf diesem Gerät.
-          </p>
-        )}
-      </Card>
+      <SyncCard />
+      <AccountCard />
 
       {supabase && (
         <button type="button" className={`${buttonStyles.danger} w-full`} disabled={signingOut} onClick={signOut}>

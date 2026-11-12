@@ -94,10 +94,19 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2>Löschen</h2>
+      <h2>Fehlerberichte</h2>
       <p>
-        Körpermaße und Trainings lassen sich in der App löschen. Für die Löschung des gesamten Kontos genügt eine kurze
-        Nachricht an den Betreiber.
+        Fehler der App werden nur auf deinem Gerät mitgeschrieben. An den Betreiber gehen sie ausschließlich, wenn du im
+        Profil „Fehlerbericht senden“ tippst – mit den letzten Fehlermeldungen, dem Sync-Status, App-Version und
+        Browser-Kennung, ohne Trainingsdaten.
+      </p>
+
+      <h2>Export und Löschen</h2>
+      <p>
+        Unter Profil → „Konto &amp; Daten“ kannst du alle Daten exportieren (JSON, Sätze als CSV) und dein Konto selbst
+        löschen. Dabei werden alle Daten auf dem Server – einschließlich der Fortschrittsfotos – und auf dem Gerät
+        endgültig entfernt. Einzelne Trainings, Körpermaße und Fotos lassen sich jederzeit in der App löschen. Beim
+        Abmelden werden alle Daten des Kontos vom Gerät entfernt.
       </p>
     </main>
   );

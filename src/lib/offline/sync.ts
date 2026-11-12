@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { logError } from "@/lib/error-log";
 import { getDb } from "./db";
 import { flushOutboxOnce, supabaseBackend } from "./outbox";
 
@@ -40,6 +41,7 @@ export async function syncNow(): Promise<void> {
   useSyncStatus.setState({ syncing: true });
   try {
     const result = await flushOutboxOnce(getDb(), supabaseBackend(supabase, { photoBlob: async (id) => (await getDb().photos.get(id))?.blob }));
+    if (result.error) logError("sync", result.error);
     useSyncStatus.setState((prev) => ({
       lastError: result.error ?? null,
       lastSyncedAt: result.synced > 0 ? new Date().toISOString() : prev.lastSyncedAt,

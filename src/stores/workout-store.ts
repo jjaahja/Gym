@@ -43,6 +43,10 @@ export interface ActiveSession {
   substitutions?: Record<string, string>;
   /** Heute weggelassene Planübungen (planExerciseId) */
   skipped?: string[];
+  /** Reihenfolge der Übungen heute (Schlüssel: planExerciseId bzw. Log-ID) */
+  order?: string[];
+  /** Supersätze heute: Gruppen direkt aufeinanderfolgender Übungen */
+  supersets?: string[][];
   startedAt: string;
   exercises: LoggedExercise[];
 }
@@ -78,6 +82,8 @@ export interface WorkoutState {
    * set_logs folgen per Fremdschlüssel). Planübungen werden für heute ausgeblendet.
    */
   removeExercise(target: { planExerciseId?: string | null; exerciseLogId?: string | null }): void;
+  /** Reihenfolge und Supersätze für dieses Training (nur lokal) */
+  arrange(order: string[], supersets: string[][]): void;
   logSet(exerciseLogId: string, input: SetInput): string;
   updateSet(exerciseLogId: string, setId: string, input: Partial<SetInput>): void;
   removeSet(exerciseLogId: string, setId: string): void;
@@ -279,6 +285,11 @@ export function createWorkoutStore(deps: WorkoutStoreDeps) {
             };
             set({ session: next });
             if (log) emit(next, { table: "exercise_logs", op: "delete", rowId: log.id, payload: { id: log.id } });
+          },
+
+          arrange(order, supersets) {
+            const session = requireSession();
+            set({ session: { ...session, order: [...order], supersets: supersets.map((g) => [...g]) } });
           },
 
           ensureExercise(exerciseId, planExerciseId = null) {

@@ -173,3 +173,29 @@ export function TrashIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function NoteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 4h10l4 4v12H5z" />
+      <path d="M15 4v4h4M8 12h8M8 16h5" />
+    </Icon>
+  );
+}
+
+export function LinkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+    </Icon>
+  );
+}
+
+export function ReorderIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3" />
+    </Icon>
+  );
+}

@@ -153,6 +153,30 @@ export interface RemoteProfile {
   effort_scale: EffortScale;
 }
 
+export interface RemoteNote {
+  exercise_id: Id;
+  note: string;
+  updated_at: string;
+}
+
+export interface RemoteNutrition {
+  day: string;
+  protein_g: number | string | null;
+  energy_kcal: number | string | null;
+  source: "manual" | "health_connect";
+  updated_at: string;
+}
+
+export interface RemotePhoto {
+  id: Id;
+  taken_on: string;
+  pose: "front" | "side" | "back";
+  storage_path: string;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+}
+
 /** Alles, was ein Gerät für den Start braucht. */
 export interface RemoteState {
   profile: RemoteProfile | null;
@@ -162,6 +186,10 @@ export interface RemoteState {
   adaptations: RemoteAdaptation[];
   sessions: RemoteSession[];
   measurements: RemoteMeasurement[];
+  /** ab Funktionspaket 11/2026 – fehlt, wenn der Server die Tabellen (noch) nicht hat */
+  notes?: RemoteNote[];
+  nutrition?: RemoteNutrition[];
+  photos?: RemotePhoto[];
 }
 
 // ─────────────────────────── Zuordnung Katalog-ID → Slug ───────────────────────────
@@ -391,6 +419,24 @@ export async function fetchRemoteState(client: SupabaseClient, userId: string): 
     ),
   ]);
 
+  // Neuere Tabellen: fehlen sie auf dem Server, läuft der Abgleich ohne sie weiter (statt ganz zu scheitern)
+  const optional = async <T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) => {
+    try {
+      return await all<T>(query);
+    } catch {
+      return undefined;
+    }
+  };
+  const [notes, nutrition, photos] = await Promise.all([
+    optional<RemoteNote>((from, to) => client.from("exercise_notes").select("exercise_id, note, updated_at").range(from, to)),
+    optional<RemoteNutrition>((from, to) =>
+      client.from("nutrition_days").select("day, protein_g, energy_kcal, source, updated_at").order("day").range(from, to),
+    ),
+    optional<RemotePhoto>((from, to) =>
+      client.from("progress_photos").select("id, taken_on, pose, storage_path, width, height, created_at").order("taken_on").range(from, to),
+    ),
+  ]);
+
   const remotePlan = plan as RemotePlan | null;
   const [assessment, adaptations] = remotePlan
     ? await Promise.all([
@@ -411,5 +457,8 @@ export async function fetchRemoteState(client: SupabaseClient, userId: string): 
     adaptations: adaptations as RemoteAdaptation[],
     sessions,
     measurements,
+    notes,
+    nutrition,
+    photos,
   };
 }

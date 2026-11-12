@@ -1,7 +1,10 @@
 "use client";
 
 import { create } from "zustand";
+import { cancelRestEnd, scheduleRestEnd } from "@/lib/native/device";
 import type { CompletionResult } from "@/lib/workout/complete";
+
+const REST_BODY = "Zeit für den nächsten Satz.";
 
 // Flüchtiger UI-Zustand des Trackers (nicht persistiert).
 
@@ -19,12 +22,23 @@ export const useRestTimer = create<RestTimerState>((set, get) => ({
   endsAt: null,
   totalSeconds: 0,
   hint: "",
-  start: (seconds, hint) => set({ endsAt: Date.now() + seconds * 1000, totalSeconds: seconds, hint }),
+  start: (seconds, hint) => {
+    const endsAt = Date.now() + seconds * 1000;
+    set({ endsAt, totalSeconds: seconds, hint });
+    // Android-App: Benachrichtigung auch bei ausgeschaltetem Bildschirm
+    void scheduleRestEnd(endsAt, REST_BODY).catch(() => {});
+  },
   extend: (seconds) => {
     const { endsAt, totalSeconds } = get();
-    if (endsAt) set({ endsAt: Math.max(endsAt, Date.now()) + seconds * 1000, totalSeconds: totalSeconds + seconds });
+    if (!endsAt) return;
+    const next = Math.max(endsAt, Date.now()) + seconds * 1000;
+    set({ endsAt: next, totalSeconds: totalSeconds + seconds });
+    void scheduleRestEnd(next, REST_BODY).catch(() => {});
   },
-  stop: () => set({ endsAt: null }),
+  stop: () => {
+    set({ endsAt: null });
+    void cancelRestEnd().catch(() => {});
+  },
 }));
 
 interface CompletionState {

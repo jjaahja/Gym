@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         // Eigene Plugins: Trainings in Health Connect speichern, Updates direkt aus der App
         registerPlugin(GymHealthPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(DevicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

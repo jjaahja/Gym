@@ -1,5 +1,6 @@
 "use client";
 
+import { ExerciseNote } from "@/components/exercise-note";
 import { ExerciseVideo, hasVideo } from "@/components/exercise-video";
 import { PencilIcon, PlayIcon, SwapIcon, TrashIcon } from "@/components/icons";
 import { Sheet } from "@/components/sheet";
@@ -16,6 +17,8 @@ import { formatGuidelineMessage, resolveExerciseGuidelines, resolveMuscleGuideli
 import { formatEffort, rirToRpe } from "@/lib/training/effort";
 import { suggestLoad, type LoadSuggestion } from "@/lib/training/load-suggestion";
 import { suggestNextSet } from "@/lib/training/progression";
+import { barFor, platesPerSide, warmupSets } from "@/lib/training/warmup";
+import type { SupersetInfo } from "@/lib/workout/arrange";
 import { muscleVolume, TECHNIQUE_SET_TYPES } from "@/lib/training/volume";
 import { formatWeight, fromDisplayWeight, kgToLb, toDisplayWeight, weightUnitLabel } from "@/lib/units";
 import type { StoredPlanExercise } from "@/stores/plan-store";
@@ -72,6 +75,9 @@ export function ExerciseCard({
   substitutedFor = null,
   deload = false,
   onRemove,
+  superset = null,
+  onSupersetNext,
+  supersetNextName = null,
 }: {
   exercise: Exercise;
   planned: StoredPlanExercise | null;
@@ -94,6 +100,10 @@ export function ExerciseCard({
   deload?: boolean;
   /** Übung aus dem heutigen Training entfernen (Dialog) */
   onRemove?: () => void;
+  /** Supersatz: Bezeichnung (A1 …) und Sprung zur nächsten Übung der Gruppe */
+  superset?: SupersetInfo | null;
+  onSupersetNext?: () => void;
+  supersetNextName?: string | null;
 }) {
   const { unitSystem: unit, effortScale: scale, loadTarget } = useSettings();
   const guidelines = resolveExerciseGuidelines(exercise, goal, experience);
@@ -152,6 +162,38 @@ export function ExerciseCard({
       );
 
   const techniqueDone = sets.some((s) => TECHNIQUE_SET_TYPES.includes(s.setType));
+  // Im Arbeitssatz eingetipptes Gewicht (kg) – Grundlage für Aufwärmsätze, wenn es noch keinen Vorschlag gibt
+  const [typedWeight, setTypedWeight] = useState<number | null>(null);
+
+  /** Nach jedem eingetragenen Satz: Karte offen halten, Pause starten. */
+  const afterLog = (type: SetType) => {
+    onActivity();
+    if (type === p.technique) setMode("working");
+    // Supersatz: kurz durchatmen, dann direkt die nächste Übung der Gruppe
+    if (type !== "warmup" && superset && !superset.isLast && onSupersetNext) {
+      useRestTimer.getState().start(15, `Supersatz – weiter mit ${supersetNextName ?? "der nächsten Übung"}`);
+      onSupersetNext();
+      return;
+    }
+    // letzte Übung der Gruppe: volle Pause, danach wieder die erste
+    if (type !== "warmup" && superset?.isLast && onSupersetNext) onSupersetNext();
+    const isLastPlanned = type === "working" && working.length + 1 >= p.sets && !p.technique;
+    useRestTimer
+      .getState()
+      .start(type === "warmup" ? 60 : p.restSeconds, isLastPlanned ? "Übung geschafft – Pause vor der nächsten" : formatGuidelineMessage(guidelines.rest_interval!));
+  };
+
+  // Aufwärmsätze bis zum (vorgeschlagenen) Arbeitsgewicht; schon eingetragene Aufwärmgewichte fallen weg
+  const loggedWarmups = new Set(sets.filter((x) => x.setType === "warmup").map((x) => x.weightKg));
+  const warmups = warmupSets(exercise, load?.weightKg ?? planned?.targetLoadKg ?? lastTop ?? typedWeight).filter((w) => !loggedWarmups.has(w.weightKg));
+
+  // Ein Tipp: letzten Arbeitssatz wiederholen oder mit einer Wiederholung mehr (= eine weniger im Tank)
+  const lastSet = [...working].reverse().find((s) => s.reps != null);
+  const quickLog = (reps: number, rir: number | null) => {
+    if (!log || !lastSet) return;
+    workoutStore.getState().logSet(log.id, { setType: "working", weightKg: lastSet.weightKg, reps, rir });
+    afterLog("working");
+  };
   const [mode, setMode] = useState<"working" | "warmup" | "technique">("working");
   const [videoOpen, setVideoOpen] = useState(false);
   const nextType: SetType = mode === "warmup" ? "warmup" : mode === "technique" && p.technique ? p.technique : "working";
@@ -174,6 +216,11 @@ export function ExerciseCard({
         >
           {done ? "✓" : `${working.length}/${p.sets}`}
         </span>
+        {superset && (
+          <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-bold text-accent" title="Supersatz">
+            {superset.label}
+          </span>
+        )}
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">{exercise.nameDe}</span>
           <span className="tabular block text-sm text-muted">
@@ -195,6 +242,7 @@ export function ExerciseCard({
           )}
           {(onSwap || onRemove || hasVideo(exercise.slug)) && (
             <div className="flex flex-wrap gap-2">
+              <ExerciseNote exerciseId={exercise.id} exerciseName={exercise.nameDe} variant="button" />
               {hasVideo(exercise.slug) && (
                 <button
                   type="button"
@@ -315,6 +363,30 @@ export function ExerciseCard({
             </ol>
           )}
 
+          {/* Schnell eintragen */}
+          {lastSet && !timed && mode === "working" && (
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schnell eintragen">
+              <button
+                type="button"
+                onClick={() => quickLog(lastSet.reps!, lastSet.rir)}
+                className="min-h-11 rounded-[0.75rem] bg-accent-soft px-2 text-[0.9375rem] font-semibold text-accent active:opacity-70"
+              >
+                ↻ Wiederholen
+                <span className="tabular block text-xs font-medium opacity-80">{describeSet(lastSet, unit, scale)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => quickLog(lastSet.reps! + 1, lastSet.rir == null ? null : Math.max(0, lastSet.rir - 1))}
+                className="min-h-11 rounded-[0.75rem] bg-accent-soft px-2 text-[0.9375rem] font-semibold text-accent active:opacity-70"
+              >
+                +1 Wdh.
+                <span className="tabular block text-xs font-medium opacity-80">
+                  {describeSet({ ...lastSet, reps: lastSet.reps! + 1, rir: lastSet.rir == null ? null : Math.max(0, lastSet.rir - 1) }, unit, scale)}
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* Satztyp */}
           <div className="flex flex-wrap gap-2 text-sm">
             <ModeChip active={mode === "working"} onClick={() => setMode("working")}>
@@ -330,6 +402,33 @@ export function ExerciseCard({
             )}
           </div>
 
+          {/* Aufwärm-Vorschlag: antippen = eintragen */}
+          {mode === "warmup" && warmups.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted">Aufwärmen bis zum Arbeitsgewicht – antippen zum Eintragen:</p>
+              <div className="flex flex-wrap gap-2">
+                {warmups.map((w) => (
+                  <button
+                    key={`${w.weightKg}-${w.reps}`}
+                    type="button"
+                    onClick={() => {
+                      workoutStore.getState().logSet(workoutStore.getState().ensureExercise(exercise.id, planned?.id ?? null), {
+                        setType: "warmup",
+                        weightKg: w.weightKg,
+                        reps: w.reps,
+                        rir: null,
+                      });
+                      afterLog("warmup");
+                    }}
+                    className="tabular min-h-10 rounded-full bg-accent-soft px-3.5 text-sm font-semibold text-accent active:opacity-70"
+                  >
+                    {formatWeight(w.weightKg, unit)} × {w.reps}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <SetEntry
             key={`${sets.length}-${nextType}-${last === undefined ? "laden" : "bereit"}-${loadTarget}`}
             exercise={exercise}
@@ -340,16 +439,11 @@ export function ExerciseCard({
             setType={nextType}
             repsHint={nextType === "working" && load?.expectedReps ? String(load.expectedReps) : `${p.repsMin}–${p.repsMax}`}
             target={nextType === "working" && load?.weightKg != null ? load : null}
+            barKg={barFor(exercise)}
+            onWeightChange={nextType === "working" ? setTypedWeight : undefined}
             defaultWeightKg={nextType === "warmup" ? (suggestion.weightKg ? Math.round((suggestion.weightKg * 0.5) / exercise.loadIncrementKg) * exercise.loadIncrementKg : null) : suggestion.weightKg}
             suggestionReason={nextType === "working" && working.length > 0 ? suggestion.reason : null}
-            onLogged={(type) => {
-              onActivity();
-              if (type === p.technique) setMode("working");
-              const isLastPlanned = type === "working" && working.length + 1 >= p.sets && !p.technique;
-              useRestTimer
-                .getState()
-                .start(type === "warmup" ? 60 : p.restSeconds, isLastPlanned ? "Übung geschafft – Pause vor der nächsten" : formatGuidelineMessage(guidelines.rest_interval!));
-            }}
+            onLogged={afterLog}
             ensureLog={() => workoutStore.getState().ensureExercise(exercise.id, planned?.id ?? null)}
           />
 
@@ -390,6 +484,8 @@ function SetEntry({
   defaultWeightKg,
   suggestionReason,
   target,
+  barKg,
+  onWeightChange,
   onLogged,
   ensureLog,
 }: {
@@ -404,6 +500,10 @@ function SetEntry({
   suggestionReason: string | null;
   /** Ziel für den nächsten Arbeitssatz (Gewichtsvorschlag aus der bisherigen Leistung) */
   target: LoadSuggestion | null;
+  /** Langhantel/SZ-Stange: Scheiben pro Seite anzeigen */
+  barKg: number | null;
+  /** eingetipptes Gewicht in kg melden (für Aufwärmsätze) */
+  onWeightChange?: (kg: number | null) => void;
   onLogged: (type: SetType) => void;
   ensureLog: () => string;
 }) {
@@ -454,11 +554,15 @@ function SetEntry({
           <NumberField
             label={bodyweight ? `Zusatz (${weightUnitLabel(unit)})` : `Gewicht (${weightUnitLabel(unit)})`}
             value={weight}
-            onChange={setWeight}
+            onChange={(v) => {
+              setWeight(v);
+              const n = parseNumber(v);
+              onWeightChange?.(n == null ? null : fromDisplayWeight(n, unit));
+            }}
             onMinus={() => setWeight(bump(weight, -step))}
             onPlus={() => setWeight(bump(weight, step))}
             inputMode="decimal"
-            placeholder={bodyweight ? "optional" : "0"}
+            placeholder="0"
           />
         )}
         <NumberField
@@ -472,6 +576,17 @@ function SetEntry({
         />
       </div>
 
+      {barKg && unit === "metric" && (() => {
+        const w = parseNumber(weight);
+        if (w == null || w < barKg) return null;
+        const { plates, restKg } = platesPerSide(w, barKg);
+        return (
+          <p className="tabular -mt-1 text-xs text-muted">
+            Pro Seite: {plates.length ? plates.map((p) => p.toLocaleString("de-DE")).join(" + ") : "nur Stange"}
+            {restKg > 0 && ` (${restKg.toLocaleString("de-DE")} kg lassen sich nicht stecken)`} · Stange {barKg} kg
+          </p>
+        );
+      })()}
       {target && (
         <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm">
           <span className="font-semibold">

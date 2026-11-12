@@ -16,7 +16,10 @@ export type SyncTable =
   | "workout_sessions"
   | "exercise_logs"
   | "set_logs"
-  | "body_measurements";
+  | "body_measurements"
+  | "exercise_notes"
+  | "nutrition_days"
+  | "progress_photos";
 
 export interface OutboxEntry {
   seq?: number;
@@ -84,10 +87,48 @@ export interface Measurement {
   notes: string | null;
 }
 
+/** Notiz zu einer Übung (z. B. „Sitzhöhe 4“) – eine je Übung. */
+export interface ExerciseNote {
+  exerciseId: string;
+  note: string;
+  updatedAt: string;
+}
+
+/** Ernährung eines Tages (lokale Zeit). */
+export interface NutritionDay {
+  /** YYYY-MM-DD */
+  day: string;
+  proteinG: number | null;
+  energyKcal: number | null;
+  source: "manual" | "health_connect";
+  updatedAt: string;
+}
+
+export type PhotoPose = "front" | "side" | "back";
+
+/** Fortschrittsfoto: Datei lokal (Blob) und/oder im privaten Speicher (storagePath). */
+export interface ProgressPhoto {
+  id: string;
+  /** YYYY-MM-DD */
+  takenOn: string;
+  pose: PhotoPose;
+  storagePath: string | null;
+  width: number | null;
+  height: number | null;
+  /** verkleinertes JPEG; fehlt bei Fotos von anderen Geräten, bis es geladen wurde */
+  blob?: Blob;
+  /** noch nicht hochgeladen */
+  pending?: boolean;
+  createdAt: string;
+}
+
 export class GymDB extends Dexie {
   outbox!: EntityTable<OutboxEntry, "seq">;
   sessions!: EntityTable<CompletedSession, "id">;
   measurements!: EntityTable<Measurement, "id">;
+  notes!: EntityTable<ExerciseNote, "exerciseId">;
+  nutrition!: EntityTable<NutritionDay, "day">;
+  photos!: EntityTable<ProgressPhoto, "id">;
 
   constructor(name = "gym", options?: DexieOptions) {
     super(name, options);
@@ -102,6 +143,14 @@ export class GymDB extends Dexie {
       outbox: "++seq, table, rowId",
       sessions: "id, endedAt, *exerciseIds",
       measurements: "id, measuredOn",
+    });
+    this.version(4).stores({
+      outbox: "++seq, table, rowId",
+      sessions: "id, endedAt, *exerciseIds",
+      measurements: "id, measuredOn",
+      notes: "exerciseId",
+      nutrition: "day",
+      photos: "id, takenOn, pose",
     });
   }
 }

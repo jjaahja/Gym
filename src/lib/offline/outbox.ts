@@ -14,7 +14,11 @@ export interface SyncBackend {
 /** Höchstens so viele Zeilen je Anfrage */
 export const MAX_BATCH = 200;
 
-const KEY_COLUMNS: Record<string, string[]> = { user_equipment: ["user_id", "equipment_id"] };
+const KEY_COLUMNS: Record<string, string[]> = {
+  user_equipment: ["user_id", "equipment_id"],
+  exercise_notes: ["user_id", "exercise_id"],
+  nutrition_days: ["user_id", "day"],
+};
 const rowKey = (table: string, row: Record<string, unknown>) =>
   (KEY_COLUMNS[table] ?? ["id"]).map((k) => String(row[k])).join(":");
 const columnsOf = (row: Record<string, unknown>) => Object.keys(row).sort().join(",");

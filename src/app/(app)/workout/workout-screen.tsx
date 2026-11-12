@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sheet } from "@/components/sheet";
 import { buttonStyles, ButtonLink, Card } from "@/components/ui";
 import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable } from "@/lib/catalog";
@@ -18,7 +18,11 @@ import { allowsTechnique, prescribe, techniqueFor } from "@/lib/training/plan-ge
 import { isAndroidApp } from "@/lib/health/health-connect";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 import { rememberSetTimes } from "@/lib/health/workout-sync";
+import { ensureNotifications, keepAwake, resetWakeLock } from "@/lib/native/device";
 import { RemoveSheet } from "./remove-sheet";
+import { ArrangeSheet } from "./arrange-sheet";
+import { arrangeItems, supersetInfo } from "@/lib/workout/arrange";
+import { ReorderIcon } from "@/components/icons";
 import { SwapSheet } from "./swap-sheet";
 import type { StoredPlan } from "@/stores/plan-store";
 import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
@@ -122,6 +126,22 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
   const plan = usePlan((s) => s.plan);
   const { pending, syncing } = useSyncStatus();
   const now = useNow(1000);
+
+  // Bildschirm bleibt an, solange das Training läuft; Benachrichtigungen fürs Pausenende einmalig erlauben
+  useEffect(() => {
+    void keepAwake(true);
+    void ensureNotifications().catch(() => false);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      resetWakeLock();
+      void keepAwake(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      void keepAwake(false);
+    };
+  }, []);
   const [finishOpen, setFinishOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -160,8 +180,10 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
     const extra = session.exercises
       .filter((e) => !e.planExerciseId || !day?.exercises.some((pe) => pe.id === e.planExerciseId))
       .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, original: null, planned: null, log: e }));
-    return [...planned, ...extra].filter((i) => i.exercise);
-  }, [day, session.exercises, session.deload, session.substitutions, session.skipped, goal, experience]);
+    return arrangeItems([...planned, ...extra].filter((i) => i.exercise), session.order);
+  }, [day, session.exercises, session.deload, session.substitutions, session.skipped, session.order, goal, experience]);
+  const supersets = useMemo(() => supersetInfo(items.map((i) => i.key), session.supersets), [items, session.supersets]);
+  const [arrangeOpen, setArrangeOpen] = useState(false);
   const [swapKey, setSwapKey] = useState<string | null>(null);
   const swapItem = items.find((i) => i.key === swapKey && i.original);
   const [removeKey, setRemoveKey] = useState<string | null>(null);
@@ -178,14 +200,26 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
     <div className="space-y-3 pb-40">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{day?.name ?? "Freies Training"}</h1>
+          <h1 className="text-[1.75rem] font-bold leading-tight">{day?.name ?? "Freies Training"}</h1>
           <p className="tabular text-sm text-muted">
             {formatDuration(now - Date.parse(session.startedAt))} · {completedSets} {completedSets === 1 ? "Satz" : "Sätze"} · {syncLabel}
           </p>
         </div>
-        <button type="button" className={`${buttonStyles.primary} min-h-11 px-4 text-sm`} onClick={() => setFinishOpen(true)}>
-          Beenden
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {items.length > 1 && (
+            <button
+              type="button"
+              aria-label="Reihenfolge & Supersätze"
+              onClick={() => setArrangeOpen(true)}
+              className="grid size-11 place-items-center rounded-full bg-surface text-accent shadow-card"
+            >
+              <ReorderIcon className="size-5" />
+            </button>
+          )}
+          <button type="button" className={`${buttonStyles.primary} min-h-11 px-4 text-sm`} onClick={() => setFinishOpen(true)}>
+            Beenden
+          </button>
+        </div>
       </div>
 
       {session.deload && (
@@ -224,6 +258,22 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           substitutedFor={item.original && item.original.id !== item.exercise.id ? item.original : null}
           deload={session.deload ?? false}
           onRemove={() => setRemoveKey(item.key)}
+          superset={supersets.get(item.key) ?? null}
+          onSupersetNext={(() => {
+            const info = supersets.get(item.key);
+            if (!info) return undefined;
+            // nicht letzte → nächste der Gruppe; letzte → zurück zur ersten, solange dort Sätze offen sind
+            const first = [...supersets.entries()].find(([, v]) => v.label === `${info.label[0]}1`)?.[0];
+            const targetKey = info.next ?? first;
+            const target = items.find((i) => i.key === targetKey);
+            if (!target || target.key === item.key) return undefined;
+            if (info.isLast && (target.log?.sets.filter((x) => x.setType === "working").length ?? 0) >= (target.planned?.sets ?? 3)) return undefined;
+            return () => setExpandedKey(target.key);
+          })()}
+          supersetNextName={(() => {
+            const next = supersets.get(item.key)?.next;
+            return next ? items.find((i) => i.key === next)?.exercise.nameDe ?? null : null;
+          })()}
         />
         );
       })}
@@ -245,6 +295,14 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           experience={experience}
           equipment={plan?.assessment.equipment ?? []}
           canSwap={(swapItem.log?.sets.length ?? 0) === 0}
+        />
+      )}
+
+      {arrangeOpen && (
+        <ArrangeSheet
+          onClose={() => setArrangeOpen(false)}
+          items={items.map((i) => ({ key: i.key, name: i.exercise.nameDe }))}
+          supersets={session.supersets ?? []}
         />
       )}
 

@@ -6,7 +6,11 @@ import type { RemoteState } from "./remote";
 
 type Row = Record<string, unknown>;
 
-const KEYS: Record<string, string[]> = { user_equipment: ["user_id", "equipment_id"] };
+const KEYS: Record<string, string[]> = {
+  user_equipment: ["user_id", "equipment_id"],
+  exercise_notes: ["user_id", "exercise_id"],
+  nutrition_days: ["user_id", "day"],
+};
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /** So gibt Postgres timestamptz in JSON aus: ohne „.000“, mit „+00:00“. */

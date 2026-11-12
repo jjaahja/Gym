@@ -83,10 +83,13 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   const owner = deps.owner.get();
   const localPlanOwner = plans.getState().plan?.userId;
   if ((owner && owner !== userId) || (localPlanOwner && localPlanOwner !== userId)) {
-    await db.transaction("rw", db.outbox, db.sessions, db.measurements, async () => {
+    await db.transaction("rw", [db.outbox, db.sessions, db.measurements, db.notes, db.nutrition, db.photos], async () => {
       await db.outbox.clear();
       await db.sessions.clear();
       await db.measurements.clear();
+      await db.notes.clear();
+      await db.nutrition.clear();
+      await db.photos.clear();
     });
     plans.getState().clear();
     workout.setState({ session: null });
@@ -98,6 +101,8 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   const planBefore = plans.getState().plan;
   const adaptationsBefore = plans.getState().adaptations;
   const measuresBefore = new Map((await db.measurements.toArray()).map((m) => [m.id, m]));
+  const notesBefore = new Map((await db.notes.toArray()).map((n) => [n.exerciseId, n]));
+  const nutritionBefore = new Map((await db.nutrition.toArray()).map((n) => [n.day, n]));
 
   const remote = await deps.fetch();
   await deps.settle?.();
@@ -123,6 +128,56 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
     await db.measurements.bulkPut(measurements);
   });
   result.measurements = await db.measurements.count();
+
+  // 3b) Notizen, Ernährung (Server-Stand, außer lokal ausstehend oder während des Abrufs geändert)
+  if (remote.notes) {
+    const pendingNotes = new Set(pending.filter((e) => e.table === "exercise_notes").map((e) => e.rowId));
+    const incoming = remote.notes.filter((n) => !pendingNotes.has(n.exercise_id));
+    await db.transaction("rw", db.notes, async () => {
+      const ids = new Set(incoming.map((n) => n.exercise_id));
+      const stale = (await db.notes.toArray()).filter(
+        (n) => !pendingNotes.has(n.exerciseId) && !ids.has(n.exerciseId) && sameContent(n, notesBefore.get(n.exerciseId)),
+      );
+      await db.notes.bulkDelete(stale.map((n) => n.exerciseId));
+      await db.notes.bulkPut(incoming.map((n) => ({ exerciseId: n.exercise_id, note: n.note, updatedAt: n.updated_at })));
+    });
+  }
+  if (remote.nutrition) {
+    const pendingDays = new Set(pending.filter((e) => e.table === "nutrition_days").map((e) => e.rowId));
+    const incoming = remote.nutrition.filter((n) => !pendingDays.has(n.day));
+    const num = (v: number | string | null) => (v == null ? null : Number(v));
+    await db.transaction("rw", db.nutrition, async () => {
+      const days = new Set(incoming.map((n) => n.day));
+      const stale = (await db.nutrition.toArray()).filter(
+        (n) => !pendingDays.has(n.day) && !days.has(n.day) && sameContent(n, nutritionBefore.get(n.day)),
+      );
+      await db.nutrition.bulkDelete(stale.map((n) => n.day));
+      await db.nutrition.bulkPut(
+        incoming.map((n) => ({ day: n.day, proteinG: num(n.protein_g), energyKcal: num(n.energy_kcal), source: n.source, updatedAt: n.updated_at })),
+      );
+    });
+  }
+  // Fotos: Metadaten übernehmen, lokale Dateien behalten; auf anderen Geräten gelöschte entfernen
+  if (remote.photos) {
+    const remoteIds = new Set(remote.photos.map((p) => p.id));
+    await db.transaction("rw", db.photos, async () => {
+      const local = new Map((await db.photos.toArray()).map((p) => [p.id, p]));
+      for (const p of local.values()) if (!p.pending && !remoteIds.has(p.id)) await db.photos.delete(p.id);
+      await db.photos.bulkPut(
+        remote.photos!.map((p) => ({
+          ...local.get(p.id),
+          id: p.id,
+          takenOn: p.taken_on,
+          pose: p.pose,
+          storagePath: p.storage_path,
+          width: p.width,
+          height: p.height,
+          createdAt: p.created_at,
+          pending: false,
+        })),
+      );
+    });
+  }
 
   // 4) Server kennt den Plan dieses Geräts nicht → vor alle wartenden Einträge stellen
   const localPlan = plans.getState().plan;

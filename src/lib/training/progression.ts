@@ -53,6 +53,9 @@ export const ADAPTATION_MODE: Record<AdaptationType, AdaptationStatus> = {
   deload: "suggested",
   // nur auf Wunsch im Training – sofort wirksam
   remove_exercise: "accepted",
+  // vom Nutzer im Plan-Editor – sofort wirksam, rückgängig über das Protokoll
+  add_exercise: "accepted",
+  edit_exercise: "accepted",
 };
 
 const de = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 2 });

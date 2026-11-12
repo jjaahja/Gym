@@ -42,6 +42,7 @@ export interface RemotePlanExercise {
   rest_seconds: number;
   progression_scheme: ProgressionScheme;
   last_set_technique: SetType | null;
+  superset_group?: number | null;
 }
 
 export interface RemotePlanDay {
@@ -224,6 +225,7 @@ function planExercise(row: RemotePlanExercise, goal: TrainingGoal, experience: E
     guidelineKeys: [r.rep_range, r.proximity_to_failure, r.rest_interval, r.intensity_technique].flatMap((g) => (g ? [g.key] : [])),
     id: row.id,
     targetLoadKg: num(row.target_load_kg),
+    supersetGroup: row.superset_group ?? null,
   };
 }
 

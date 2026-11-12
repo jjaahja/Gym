@@ -22,7 +22,7 @@ export const DB_ENUMS = {
   progression_scheme: ["double_progression", "linear", "rir_autoregulated"],
   session_status: ["in_progress", "completed", "abandoned"],
   set_type: ["warmup", "working", "backoff", "amrap", "dropset", "myo_reps", "rest_pause", "lengthened_partials"],
-  adaptation_type: ["increase_load", "decrease_load", "add_set", "remove_set", "change_rep_range", "swap_exercise", "deload", "remove_exercise"],
+  adaptation_type: ["increase_load", "decrease_load", "add_set", "remove_set", "change_rep_range", "swap_exercise", "deload", "remove_exercise", "add_exercise", "edit_exercise"],
   adaptation_reason: ["progression_achieved", "stagnation", "regression", "high_fatigue", "volume_below_min", "volume_above_max", "user_request", "stimulus_feedback", "mesocycle_end"],
   adaptation_status: ["suggested", "accepted", "rejected", "auto_applied", "reverted"],
   exercise_preference: ["favorite", "avoid"],

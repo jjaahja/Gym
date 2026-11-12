@@ -18,6 +18,14 @@ import {
   type PlannedExercise,
 } from "@/lib/training/plan-generator";
 import { getGuideline } from "@/lib/science";
+import {
+  changedFields,
+  describeChange,
+  freshOrderIndexes,
+  pickFields,
+  supersetNumbers,
+  type PlanExercisePatch,
+} from "@/lib/training/plan-edit";
 import { ADAPTATION_MODE, buildSwapProposal, type AdaptationProposal } from "@/lib/training/progression";
 import type { Weekday } from "@/lib/training/schedule";
 
@@ -38,6 +46,8 @@ export interface AssessmentInput {
 export interface StoredPlanExercise extends PlannedExercise {
   id: string;
   targetLoadKg: number | null;
+  /** Gleiche Nummer bei direkt aufeinanderfolgenden Übungen = Supersatz (Vorgabe für jedes Training) */
+  supersetGroup?: number | null;
 }
 
 export interface StoredPlanDay {
@@ -127,6 +137,12 @@ export interface PlanState {
   swapExercise(planExerciseId: string, replacementSlug: string): AdaptationRecord | null;
   /** Übung dauerhaft aus dem Plan entfernen (vom Nutzer gewählt) – rückgängig über das Protokoll */
   removeExercise(planExerciseId: string): AdaptationRecord | null;
+  /** Vorgabe einer Planübung ändern (Sätze, Wdh., RIR, Pause, Technik) – protokolliert, rückgängig machbar */
+  editPlanExercise(planExerciseId: string, patch: PlanExercisePatch): AdaptationRecord | null;
+  /** Übung ans Ende eines Trainingstags anhängen (Vorgabe aus den Richtwerten) – protokolliert, rückgängig machbar */
+  addPlanExercise(dayId: string, slug: string, sets?: number): StoredPlanExercise | null;
+  /** Reihenfolge und Supersätze eines Trainingstags festlegen */
+  arrangeDay(dayId: string, order: readonly string[], supersets: readonly (readonly string[])[]): void;
   /** Wochentage der Trainingstage ändern (dayId → Wochentag) */
   setWeekdays(weekdays: Readonly<Record<string, Weekday | null>>): void;
   /**
@@ -207,7 +223,7 @@ export function planExerciseRow(dayId: string, e: StoredPlanExercise) {
     plan_day_id: dayId,
     exercise_id: e.exerciseId,
     order_index: e.orderIndex,
-    superset_group: null,
+    superset_group: e.supersetGroup ?? null,
     target_sets: e.sets,
     target_reps_min: e.repsMin,
     target_reps_max: e.repsMax,
@@ -346,6 +362,21 @@ export function createPlanStore(deps: PlanStoreDeps) {
             emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: exercise.id, payload: planExerciseRow(dayId, exercise) });
         };
 
+        /**
+         * Übungen eines Tages in dieser Reihenfolge speichern. Positionen werden neu vergeben (ohne Kollision mit
+         * den alten, siehe freshOrderIndexes) und alle Zeilen des Tages synchronisiert.
+         */
+        const writeDay = (dayId: string, ordered: readonly StoredPlanExercise[]) => {
+          const plan = get().plan;
+          const day = plan?.days.find((d) => d.id === dayId);
+          if (!plan || !day) return;
+          const indexes = freshOrderIndexes(day.exercises.map((e) => e.orderIndex), ordered.length);
+          const exercises = ordered.map((e, i) => ({ ...e, orderIndex: indexes[i] }));
+          const nextPlan = withPlannedVolume({ ...plan, days: plan.days.map((d) => (d.id === dayId ? { ...d, exercises } : d)) });
+          set({ plan: nextPlan });
+          for (const e of exercises) emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: e.id, payload: planExerciseRow(dayId, e) });
+        };
+
         const setSets = (sets: Readonly<Record<string, number>>) =>
           updateExercises(new Map(Object.entries(sets).map(([id, n]) => [id, (e: StoredPlanExercise) => ({ ...e, sets: n })])));
 
@@ -443,6 +474,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
             ...prescribe(replacement, plan.goal, plan.experience, { orderIndex: previous.orderIndex, sets: previous.sets, technique }),
             id: previous.id,
             targetLoadKg: null,
+            supersetGroup: previous.supersetGroup,
           };
           updateExercises(new Map([[planExerciseId, () => next]]));
           return { before: { ...proposal.before, plan_exercise: previous } };
@@ -526,7 +558,7 @@ export function createPlanStore(deps: PlanStoreDeps) {
                 type: d.type,
                 weekday: schedule ? schedule[d.dayIndex] : null,
                 estimatedMinutes: d.estimatedMinutes,
-                exercises: d.exercises.map((e) => ({ ...e, id: uuid(), targetLoadKg: null })),
+                exercises: d.exercises.map((e) => ({ ...e, id: uuid(), targetLoadKg: null, supersetGroup: null })),
               })),
             };
             set({ plan, adaptations: [] });
@@ -587,19 +619,39 @@ export function createPlanStore(deps: PlanStoreDeps) {
             } else if ((r.type === "add_set" || r.type === "remove_set") && before.sets) {
               setSets(before.sets);
             } else if (r.type === "swap_exercise" && r.planExerciseId && before.plan_exercise) {
+              // Position und Supersatz können sich seitdem geändert haben – die aktuellen behalten
               const previous = before.plan_exercise;
-              updateExercises(new Map([[r.planExerciseId, () => previous]]));
+              updateExercises(
+                new Map([[r.planExerciseId, (e: StoredPlanExercise) => ({ ...previous, orderIndex: e.orderIndex, supersetGroup: e.supersetGroup })]]),
+              );
             } else if (r.type === "remove_exercise" && before.plan_exercise && before.plan_day_id) {
-              // wieder an ihrer alten Position einfügen
-              const previous = before.plan_exercise;
-              const dayId = before.plan_day_id;
-              if (findPlanExercise(plan, previous.id) || !plan.days.some((d) => d.id === dayId)) return;
+              // wieder an ihrer alten Position einfügen (ohne Supersatz – die Nachbarn können sich geändert haben)
+              const previous = { ...before.plan_exercise, supersetGroup: null };
+              const day = plan.days.find((d) => d.id === before.plan_day_id);
+              if (findPlanExercise(plan, previous.id) || !day) return;
+              const exercises = [...day.exercises, previous].sort((a, b) => a.orderIndex - b.orderIndex);
+              if (day.exercises.some((e) => e.orderIndex === previous.orderIndex)) {
+                // Position inzwischen vergeben (umsortiert) → alle Positionen des Tages neu
+                writeDay(day.id, exercises);
+              } else {
+                const nextPlan = withPlannedVolume({ ...plan, days: plan.days.map((d) => (d.id === day.id ? { ...d, exercises } : d)) });
+                set({ plan: nextPlan });
+                emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: previous.id, payload: planExerciseRow(day.id, previous) });
+              }
+            } else if (r.type === "add_exercise") {
+              const added = (r.after as { plan_exercise?: StoredPlanExercise }).plan_exercise;
+              const found = added ? findPlanExercise(plan, added.id) : null;
+              if (!found) return;
               const days = plan.days.map((d) =>
-                d.id === dayId ? { ...d, exercises: [...d.exercises, previous].sort((a, b) => a.orderIndex - b.orderIndex) } : d,
+                d.id === found.day.id ? { ...d, exercises: d.exercises.filter((e) => e.id !== found.exercise.id) } : d,
               );
               const nextPlan = withPlannedVolume({ ...plan, days });
               set({ plan: nextPlan });
-              emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: previous.id, payload: planExerciseRow(dayId, previous) });
+              emit(nextPlan, { table: "plan_exercises", op: "delete", rowId: found.exercise.id, payload: { id: found.exercise.id } });
+            } else if (r.type === "edit_exercise" && r.planExerciseId) {
+              const fields = (r.before as { fields?: PlanExercisePatch }).fields;
+              if (!fields || !findPlanExercise(plan, r.planExerciseId)) return;
+              updateExercises(new Map([[r.planExerciseId, (e: StoredPlanExercise) => ({ ...e, ...fields })]]));
             } else if (r.type === "deload") {
               set({
                 plan: {
@@ -707,6 +759,89 @@ export function createPlanStore(deps: PlanStoreDeps) {
             set({ plan: nextPlan });
             emit(nextPlan, { table: "plan_exercises", op: "delete", rowId: planExerciseId, payload: { id: planExerciseId } });
             return r;
+          },
+
+          editPlanExercise(planExerciseId, patch) {
+            const plan = get().plan;
+            const found = plan ? findPlanExercise(plan, planExerciseId) : null;
+            if (!plan || !found) return null;
+            const previous = found.exercise;
+            const changes = changedFields(previous, patch);
+            const keys = Object.keys(changes);
+            if (keys.length === 0) return null;
+            const next = { ...previous, ...changes };
+            updateExercises(new Map([[planExerciseId, () => next]]));
+            const name = getExercise(previous.exerciseSlug)?.nameDe ?? "Übung";
+            return save(
+              record(
+                plan,
+                {
+                  type: "edit_exercise",
+                  reason: "user_request",
+                  status: ADAPTATION_MODE.edit_exercise,
+                  before: { fields: pickFields(previous, keys), exercise_slug: previous.exerciseSlug },
+                  after: { fields: changes },
+                  guidelineKey: previous.guidelineKeys[0] ?? getGuideline("exercise_variation.planned").key,
+                  explanation: `${name}: ${describeChange(previous, next)}`,
+                },
+                planExerciseId,
+              ),
+            );
+          },
+
+          addPlanExercise(dayId, slug, sets = 3) {
+            const plan = get().plan;
+            const day = plan?.days.find((d) => d.id === dayId);
+            const exercise = getExercise(slug);
+            if (!plan || !day || !exercise) return null;
+            const added: StoredPlanExercise = {
+              ...prescribe(exercise, plan.goal, plan.experience, {
+                orderIndex: day.exercises.reduce((max, e) => Math.max(max, e.orderIndex + 1), 0),
+                sets,
+                technique: null,
+              }),
+              id: uuid(),
+              targetLoadKg: null,
+              supersetGroup: null,
+            };
+            const nextPlan = withPlannedVolume({
+              ...plan,
+              days: plan.days.map((d) => (d.id === dayId ? { ...d, exercises: [...d.exercises, added] } : d)),
+            });
+            set({ plan: nextPlan });
+            emit(nextPlan, { table: "plan_exercises", op: "upsert", rowId: added.id, payload: planExerciseRow(dayId, added) });
+            // Protokoll ohne plan_exercise_id: beim Rückgängigmachen wird die Zeile gelöscht
+            save(
+              record(
+                plan,
+                {
+                  type: "add_exercise",
+                  reason: "user_request",
+                  status: ADAPTATION_MODE.add_exercise,
+                  before: {},
+                  after: { plan_exercise: added, plan_day_id: dayId, exercise_slug: slug },
+                  guidelineKey: getGuideline("exercise_variation.planned").key,
+                  explanation: `${exercise.nameDe} zu „${day.name}“ hinzugefügt (${sets} Sätze).`,
+                },
+                null,
+              ),
+            );
+            return added;
+          },
+
+          arrangeDay(dayId, order, supersets) {
+            const day = get().plan?.days.find((d) => d.id === dayId);
+            if (!day) return;
+            const byId = new Map(day.exercises.map((e) => [e.id, e]));
+            const ordered = [
+              ...order.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
+              ...day.exercises.filter((e) => !order.includes(e.id)),
+            ];
+            const numbers = supersetNumbers(supersets);
+            writeDay(
+              dayId,
+              ordered.map((e) => ({ ...e, supersetGroup: numbers.get(e.id) ?? null })),
+            );
           },
 
           setWeekdays(weekdays) {

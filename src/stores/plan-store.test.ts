@@ -476,3 +476,104 @@ describe("Übung im Training entfernen", () => {
       for (const w of removalWarnings(plan, id)) expect(w.after).toBeLessThan(w.min);
   });
 });
+
+describe("Plan selbst bearbeiten", () => {
+  it("ändert die Vorgabe, protokolliert nur echte Änderungen und macht sie rückgängig", () => {
+    const { plans, generated, entries } = setup();
+    plans.getState().createPlan({ userId: "user-1", assessment, generated });
+    const day = plans.getState().plan!.days[0];
+    const target = day.exercises[0];
+    const volumeBefore = planVolume(plans.getState().plan!.days);
+    entries.length = 0;
+
+    expect(plans.getState().editPlanExercise(target.id, { sets: target.sets })).toBeNull();
+    const r = plans.getState().editPlanExercise(target.id, { sets: target.sets + 1, restSeconds: 90, lastSetTechnique: "myo_reps" })!;
+    expect(r).toMatchObject({ type: "edit_exercise", status: "accepted", planExerciseId: target.id });
+    expect(r.before).toMatchObject({ fields: { sets: target.sets, restSeconds: target.restSeconds, lastSetTechnique: target.lastSetTechnique } });
+    expect(r.explanation).toContain(`Sätze ${target.sets} → ${target.sets + 1}`);
+    const edited = plans.getState().plan!.days[0].exercises[0];
+    expect(edited).toMatchObject({ sets: target.sets + 1, restSeconds: 90, lastSetTechnique: "myo_reps" });
+    expect(entries.find((e) => e.table === "plan_exercises")!.payload).toMatchObject({ target_sets: target.sets + 1, rest_seconds: 90 });
+    // geplantes Volumen neu berechnet
+    expect(planVolume(plans.getState().plan!.days)).not.toEqual(volumeBefore);
+
+    plans.getState().revertAdaptation(r.id);
+    expect(plans.getState().plan!.days[0].exercises[0]).toMatchObject({
+      sets: target.sets,
+      restSeconds: target.restSeconds,
+      lastSetTechnique: target.lastSetTechnique,
+    });
+    expect(plans.getState().adaptations[0].status).toBe("reverted");
+  });
+
+  it("fügt eine Übung hinzu (Vorgabe aus den Richtwerten) und entfernt sie beim Rückgängigmachen", () => {
+    const { plans, generated, entries } = setup();
+    plans.getState().createPlan({ userId: "user-1", assessment, generated });
+    const day = plans.getState().plan!.days[0];
+    entries.length = 0;
+    const added = plans.getState().addPlanExercise(day.id, "cable-lateral-raise", 2)!;
+    expect(added).toMatchObject({ exerciseSlug: "cable-lateral-raise", sets: 2, targetLoadKg: null });
+    expect(added.orderIndex).toBe(Math.max(...day.exercises.map((e) => e.orderIndex)) + 1);
+    const updated = plans.getState().plan!.days[0];
+    expect(updated.exercises.at(-1)!.id).toBe(added.id);
+    expect(updated.estimatedMinutes).toBeGreaterThan(day.estimatedMinutes);
+    expect(entries.map((e) => `${e.op}:${e.table}`)).toEqual(["upsert:plan_exercises", "upsert:plan_adaptations"]);
+
+    const log = plans.getState().adaptations[0];
+    expect(log).toMatchObject({ type: "add_exercise", planExerciseId: null });
+    entries.length = 0;
+    plans.getState().revertAdaptation(log.id);
+    expect(plans.getState().plan!.days[0].exercises.some((e) => e.id === added.id)).toBe(false);
+    expect(entries[0]).toMatchObject({ table: "plan_exercises", op: "delete", rowId: added.id });
+  });
+
+  it("sortiert um und speichert Supersätze ohne Positionskonflikte", () => {
+    const { plans, generated, entries } = setup();
+    plans.getState().createPlan({ userId: "user-1", assessment, generated });
+    const day = plans.getState().plan!.days[0];
+    const ids = day.exercises.map((e) => e.id);
+    const reversed = [...ids].reverse();
+    entries.length = 0;
+    plans.getState().arrangeDay(day.id, reversed, [[reversed[0], reversed[1]]]);
+
+    const after = plans.getState().plan!.days[0].exercises;
+    expect(after.map((e) => e.id)).toEqual(reversed);
+    expect(after[0].supersetGroup).toBe(1);
+    expect(after[1].supersetGroup).toBe(1);
+    expect(after[2].supersetGroup).toBeNull();
+    // neue Positionen kollidieren mit keiner alten → der Server kann die Zeilen in jeder Reihenfolge übernehmen
+    const before = new Set(day.exercises.map((e) => e.orderIndex));
+    expect(after.every((e) => !before.has(e.orderIndex))).toBe(true);
+    expect([...after.map((e) => e.orderIndex)]).toEqual([...after.map((e) => e.orderIndex)].sort((a, b) => a - b));
+    expect(entries).toHaveLength(ids.length);
+    expect(entries[0].payload).toMatchObject({ superset_group: 1 });
+  });
+
+  it("fügt eine entfernte Übung nach dem Umsortieren ohne Positionskonflikt wieder ein", () => {
+    const { plans, generated } = setup();
+    plans.getState().createPlan({ userId: "user-1", assessment, generated });
+    const day = plans.getState().plan!.days[0];
+    const removed = day.exercises[1];
+    const r = plans.getState().removeExercise(removed.id)!;
+    const rest = plans.getState().plan!.days[0].exercises.map((e) => e.id);
+    plans.getState().arrangeDay(day.id, rest, []);
+    plans.getState().revertAdaptation(r.id);
+    const after = plans.getState().plan!.days[0].exercises;
+    expect(after.map((e) => e.id)).toContain(removed.id);
+    expect(new Set(after.map((e) => e.orderIndex)).size).toBe(after.length);
+  });
+
+  it("behält beim Tauschen Position und Supersatz", () => {
+    const { plans, generated } = setup();
+    plans.getState().createPlan({ userId: "user-1", assessment, generated });
+    const day = plans.getState().plan!.days[0];
+    const ids = day.exercises.map((e) => e.id);
+    plans.getState().arrangeDay(day.id, ids, [[ids[0], ids[1]]]);
+    const first = plans.getState().plan!.days[0].exercises[0];
+    const alt = getExercise(first.exerciseSlug)!.slug === "barbell-bench-press" ? "dumbbell-bench-press" : "barbell-bench-press";
+    const r = plans.getState().swapExercise(first.id, alt);
+    expect(r).not.toBeNull();
+    const swapped = plans.getState().plan!.days[0].exercises[0];
+    expect(swapped).toMatchObject({ id: first.id, orderIndex: first.orderIndex, supersetGroup: 1 });
+  });
+});

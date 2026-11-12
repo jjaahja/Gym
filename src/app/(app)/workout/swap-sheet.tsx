@@ -29,6 +29,7 @@ export function SwapSheet({
   experience,
   equipment,
   canSwap,
+  planOnly = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -44,6 +45,8 @@ export function SwapSheet({
   equipment: readonly EquipmentSlug[];
   /** false, wenn schon Sätze eingetragen sind */
   canSwap: boolean;
+  /** Im Plan-Editor: immer dauerhaft, ohne laufendes Training */
+  planOnly?: boolean;
 }) {
   const sessions = useLiveQuery(() => allSessions(getDb()), [], []);
   const feedback = useMemo(
@@ -67,13 +70,16 @@ export function SwapSheet({
     [original, goal, experience, equipment, inSession, current.slug, feedback],
   );
   const [selected, setSelected] = useState<string | null>(null);
-  const [permanent, setPermanent] = useState(false);
+  const [permanentChoice, setPermanent] = useState(false);
+  const permanent = planOnly || permanentChoice;
   const substituted = current.slug !== original.slug;
 
   function confirm(slug: string) {
     const target = alternatives.find((a) => a.exercise.slug === slug)?.exercise ?? (slug === original.slug ? original : null);
     if (!target) return;
-    if (permanent && slug !== original.slug) {
+    if (planOnly) {
+      if (slug !== original.slug) planStore.getState().swapExercise(planExerciseId, slug);
+    } else if (permanent && slug !== original.slug) {
       planStore.getState().swapExercise(planExerciseId, slug);
       workoutStore.getState().substitute(planExerciseId, null);
     } else {
@@ -143,7 +149,7 @@ export function SwapSheet({
 
         {selected && canSwap && (
           <div className="space-y-3 rounded-[1.125rem] bg-surface p-3 shadow-card">
-            <fieldset>
+            <fieldset hidden={planOnly}>
               <legend className="mb-2 text-sm font-medium">Wie lange?</legend>
               <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
                 {[

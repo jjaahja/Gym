@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, MoonIcon, PlayIcon } from "@/components/icons";
+import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, MoonIcon, PencilIcon, PlayIcon } from "@/components/icons";
 import { Sheet } from "@/components/sheet";
 import { buttonStyles, Card } from "@/components/ui";
 import { WeekdayPicker } from "@/components/weekday-picker";
@@ -355,9 +355,14 @@ export function PlanDays({ plan, onEditWeekdays }: { plan: StoredPlan; onEditWee
                       </li>
                     ))}
                   </ul>
-                  <button type="button" className={`${buttonStyles.secondary} mt-2 w-full`} disabled={starting} onClick={() => start(plan, day)}>
-                    Diesen Tag jetzt starten
-                  </button>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Link href={`/plan/${day.id}`} className={buttonStyles.secondary}>
+                      <PencilIcon className="size-5" /> Bearbeiten
+                    </Link>
+                    <button type="button" className={buttonStyles.secondary} disabled={starting} onClick={() => start(plan, day)}>
+                      <PlayIcon className="size-5" /> Starten
+                    </button>
+                  </div>
                 </div>
               )}
             </li>

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Sheet } from "@/components/sheet";
 import { buttonStyles, ButtonLink, Card } from "@/components/ui";
-import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable } from "@/lib/catalog";
+import { getExerciseById, getMuscle } from "@/lib/catalog";
+import { ExercisePicker } from "@/components/exercise-picker";
 import { getDb } from "@/lib/offline/db";
 import { bestsFrom, recordsToday } from "@/lib/training/records";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
@@ -23,11 +24,11 @@ import { useHealthSync } from "@/lib/health/use-health-sync";
 import { rememberSetTimes } from "@/lib/health/workout-sync";
 import { ensureNotifications, keepAwake, resetWakeLock } from "@/lib/native/device";
 import { RemoveSheet } from "./remove-sheet";
+import { planSupersets } from "@/lib/training/plan-edit";
 import { ArrangeSheet } from "./arrange-sheet";
 import { arrangeItems, supersetInfo } from "@/lib/workout/arrange";
 import { ReorderIcon } from "@/components/icons";
 import { SwapSheet } from "./swap-sheet";
-import type { StoredPlan } from "@/stores/plan-store";
 import { useWorkout, useWorkoutHydrated, workoutStore } from "@/stores/workout";
 import type { ActiveSession } from "@/stores/workout-store";
 import { useNow } from "@/lib/use-now";
@@ -185,7 +186,9 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
       .map((e) => ({ key: e.id, exercise: getExerciseById(e.exerciseId)!, original: null, planned: null, log: e }));
     return arrangeItems([...planned, ...extra].filter((i) => i.exercise), session.order);
   }, [day, session.exercises, session.deload, session.substitutions, session.skipped, session.order, goal, experience]);
-  const supersets = useMemo(() => supersetInfo(items.map((i) => i.key), session.supersets), [items, session.supersets]);
+  // Supersätze: heute festgelegte, sonst die aus dem Plan
+  const groups = useMemo(() => session.supersets ?? planSupersets(day?.exercises ?? []), [session.supersets, day]);
+  const supersets = useMemo(() => supersetInfo(items.map((i) => i.key), groups), [items, groups]);
   const [arrangeOpen, setArrangeOpen] = useState(false);
   const [swapKey, setSwapKey] = useState<string | null>(null);
   const swapItem = items.find((i) => i.key === swapKey && i.original);
@@ -305,7 +308,7 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
         <ArrangeSheet
           onClose={() => setArrangeOpen(false)}
           items={items.map((i) => ({ key: i.key, name: i.exercise.nameDe }))}
-          supersets={session.supersets ?? []}
+          supersets={groups}
         />
       )}
 
@@ -323,61 +326,14 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
       )}
 
       <RestTimer />
-      <AddExerciseSheet open={addOpen} onClose={() => setAddOpen(false)} plan={plan} onAdded={(key) => setExpandedKey(key)} />
+      <ExercisePicker
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        equipment={plan?.assessment.equipment ?? null}
+        onPick={(e) => setExpandedKey(workoutStore.getState().addExercise(e.id))}
+      />
       <FinishSheet open={finishOpen} onClose={() => setFinishOpen(false)} session={session} />
     </div>
-  );
-}
-
-function AddExerciseSheet({
-  open,
-  onClose,
-  plan,
-  onAdded,
-}: {
-  open: boolean;
-  onClose: () => void;
-  plan: StoredPlan | null;
-  onAdded: (key: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const options = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("de");
-    return catalog
-      .filter((e) => !plan || isExerciseAvailable(e, plan.assessment.equipment, "advanced"))
-      .filter((e) => q === "" || e.nameDe.toLocaleLowerCase("de").includes(q))
-      .slice(0, 40);
-  }, [query, plan]);
-
-  return (
-    <Sheet open={open} onClose={onClose} title="Übung hinzufügen">
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Übung suchen"
-        aria-label="Übung suchen"
-        className="field block min-h-12 px-4"
-      />
-      <ul className="mt-3 divide-y divide-border">
-        {options.map((e) => (
-          <li key={e.id}>
-            <button
-              type="button"
-              className="flex min-h-12 w-full items-center justify-between gap-3 text-left"
-              onClick={() => {
-                onAdded(workoutStore.getState().addExercise(e.id));
-                setQuery("");
-                onClose();
-              }}
-            >
-              <span className="font-medium">{e.nameDe}</span>
-              <span className="text-xs text-muted">{getMuscle(e.muscles[0].muscle).nameDe.replace(/ \(.*\)$/, "")}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Sheet>
   );
 }
 

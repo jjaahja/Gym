@@ -185,3 +185,43 @@ export function Toggle({
     </button>
   );
 }
+
+/** iOS-Stepper: − Wert + (Wert wird angesagt, Knöpfe an den Grenzen deaktiviert). */
+export function Stepper({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  format = String,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  format?: (value: number) => string;
+}) {
+  const btn = "grid h-9 w-11 place-items-center text-xl font-medium text-fg active:bg-fg/10 disabled:opacity-30";
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-3">
+      <span className="text-[1.0625rem]">{label}</span>
+      <div className="flex items-center gap-2">
+        <output aria-live="polite" aria-label={label} className="tabular min-w-12 text-right text-[1.0625rem] font-semibold">
+          {format(value)}
+        </output>
+        <div className="flex items-center overflow-hidden rounded-[0.5rem] bg-surface-2">
+          <button type="button" aria-label={`${label} verringern`} disabled={value - step < min} onClick={() => onChange(value - step)} className={btn}>
+            −
+          </button>
+          <span aria-hidden="true" className="h-5 w-px bg-border" />
+          <button type="button" aria-label={`${label} erhöhen`} disabled={value + step > max} onClick={() => onChange(value + step)} className={btn}>
+            +
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

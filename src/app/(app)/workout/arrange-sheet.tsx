@@ -7,15 +7,19 @@ import { buttonStyles } from "@/components/ui";
 import { move, normalizeSupersets, supersetInfo, toggleLink } from "@/lib/workout/arrange";
 import { workoutStore } from "@/stores/workout";
 
-/** Reihenfolge ändern und Übungen zu Supersätzen verbinden (nur für dieses Training). */
+/** Reihenfolge ändern und Übungen zu Supersätzen verbinden – im Training (nur heute) oder im Plan (dauerhaft). */
 export function ArrangeSheet({
   onClose,
   items,
   supersets,
+  onSave = (order, groups) => workoutStore.getState().arrange(order, groups),
+  hint,
 }: {
   onClose: () => void;
   items: readonly { key: string; name: string }[];
   supersets: readonly (readonly string[])[];
+  onSave?: (order: string[], supersets: string[][]) => void;
+  hint?: string;
 }) {
   const names = new Map(items.map((i) => [i.key, i.name]));
   const [order, setOrder] = useState(() => items.map((i) => i.key));
@@ -23,7 +27,7 @@ export function ArrangeSheet({
   const info = supersetInfo(order, groups);
 
   const save = () => {
-    workoutStore.getState().arrange(order, normalizeSupersets(order, groups));
+    onSave(order, normalizeSupersets(order, groups));
     onClose();
   };
 
@@ -31,7 +35,7 @@ export function ArrangeSheet({
     <Sheet open onClose={onClose} title="Reihenfolge & Supersätze">
       <p className="mb-3 text-sm text-muted">
         Mit den Pfeilen verschieben. Das Ketten-Symbol verbindet eine Übung mit der nächsten zum Supersatz – die Pause kommt
-        dann erst nach der letzten Übung der Gruppe.
+        dann erst nach der letzten Übung der Gruppe.{hint ? ` ${hint}` : ""}
       </p>
       <ol className="space-y-1">
         {order.map((key, i) => {

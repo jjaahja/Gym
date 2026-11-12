@@ -7,6 +7,7 @@ import { AppUpdateCheck } from "@/components/app-update";
 import { isAndroidApp } from "@/lib/health/health-connect";
 import { useHealthExtras } from "@/lib/health/extras";
 import { useHealthSync } from "@/lib/health/use-health-sync";
+import { watchReminders } from "@/lib/reminders";
 import { getDb } from "@/lib/offline/db";
 import { syncDevice } from "@/lib/offline/device-sync";
 import { useSyncStatus } from "@/lib/offline/sync";
@@ -35,6 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <StoreHydration />
       <SyncManager />
       <HealthConnectSync />
+      <ReminderSync />
       <AppUpdateCheck />
       <ServiceWorkerRegistration />
       {children}
@@ -113,6 +115,15 @@ function ServiceWorkerRegistration() {
     navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .catch((err) => console.error("Service Worker nicht registriert", err));
+  }, []);
+  return null;
+}
+
+/** Android-App: Trainingserinnerungen aktuell halten (Uhrzeit, Schalter, Wochentage des Plans). */
+function ReminderSync() {
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    return watchReminders();
   }, []);
   return null;
 }

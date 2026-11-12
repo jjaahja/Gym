@@ -89,3 +89,15 @@ Fortschritt → Körper → „Fortschrittsfotos“.
   10.1007/s40279-022-01706-y). Der Ruhepuls ist ein Erfahrungswert – die App formuliert es als Hinweis, nicht als Regel.
 - **Android:** `GymHealth` liest per `aggregateGroupByPeriod` (Schlaf von Mittag bis Mittag, damit eine Nacht nicht
   auf zwei Tage fällt); Berechtigungen `READ_NUTRITION`, `READ_SLEEP`, `READ_RESTING_HEART_RATE` ab APK 1.3.
+
+## Motivation (`src/lib/motivation.ts`, `src/lib/reminders.ts`)
+
+- **Wochenziel & Serie:** Ring in „Diese Woche“ (Trainings dieser Woche / Ziel). Ziel = Trainingstage im Plan oder
+  eigener Wert (Ring antippen). Die Serie zählt Wochen in Folge mit erreichtem Ziel; die laufende Woche zählt, sobald
+  das Ziel erreicht ist, und beendet die Serie nicht vor Sonntag. Daneben die beste Serie.
+- **Monatsrückblick** (Fortschritt → „Rückblick“, in der ersten Woche eines Monats auch im Plan): Trainings, Zeit,
+  harte Sätze und bewegte Last mit Vergleich zum Vormonat, neue Bestwerte (geschätztes 1RM gegenüber allem davor –
+  auch innerhalb des Monats; das allererste Training ist nur Ausgangswert), meisttrainierte Muskeln, Körpergewicht
+  und Eiweiß im Schnitt.
+- **Erinnerungen** (Profil, Android-App): lokale Benachrichtigung an jedem Trainingstag des Plans zur gewählten
+  Uhrzeit; wird bei Änderungen an Uhrzeit, Schalter oder Wochentagen automatisch neu geplant.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppUpdateCard } from "@/components/app-update";
 import { ThemePicker } from "@/components/theme-picker";
+import { ReminderSettings } from "./reminder-settings";
 import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { useHealthSync } from "@/lib/health/use-health-sync";
@@ -104,6 +105,8 @@ export function SettingsForm() {
           </p>
         </div>
       </Card>
+
+      <ReminderSettings />
 
       <Card>
         <h2 className="font-semibold">Synchronisierung</h2>

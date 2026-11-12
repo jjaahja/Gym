@@ -6,4 +6,7 @@
     <string name="custom_url_scheme">de.jjaahja.gym</string>
     <!-- Health Connect zeigt diese Seite unter „Datennutzung“ der App -->
     <string name="health_connect_privacy_policy_url">https://gym-alpha-flax.vercel.app/datenschutz</string>
+    <!-- Startbildschirm-Widget -->
+    <string name="widget_name">Gym – nächstes Training</string>
+    <string name="widget_description">Nächstes Training und Wochenziel auf einen Blick</string>
 </resources>

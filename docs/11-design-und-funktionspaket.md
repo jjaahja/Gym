@@ -121,3 +121,19 @@ Fortschritt → Körper → „Fortschrittsfotos“.
 - **APK-Bereitstellung:** Die App lädt Updates von der eigenen Domain (`/downloads/version.json`, SHA-256 geprüft);
   GitHub (raw) bleibt nur der Weg für die alte Version 1.1. GitHub-Releases lassen sich mit den hier verfügbaren
   Werkzeugen nicht anlegen – nicht nötig, solange Vercel die Datei ausliefert.
+
+## Startbildschirm-Widget (Android-App ab 1.3)
+
+- Zeigt das nächste Training („Heute“ bzw. „Nächstes Training · Morgen“) mit Dauer und Übungszahl, darunter das
+  Wochenziel als Balken und die Serie; während eines Trainings „Training läuft“. Antippen öffnet die App.
+- Den Inhalt berechnet die App (`src/lib/widget.ts`) und übergibt ihn bei jeder Änderung an Plan, Trainings oder
+  Einstellungen sowie beim Verlassen der App (`GymDevice.updateWidget` → SharedPreferences → `GymWidgetProvider`).
+  Das Widget selbst rechnet nichts und weckt das Gerät nicht (`updatePeriodMillis = 0`).
+- Hell/dunkel nach System, Akzentfarbe aus dem gewählten Farbthema. Nur widget-taugliche Views (RemoteViews).
+
+## Android-App 1.3
+
+Neu gegenüber 1.2 (Update über Profil → App-Version): Widget, Kamera für Fortschrittsfotos (`CAMERA`), Health Connect
+lesen für Ernährung, Schlaf und Ruhepuls (`READ_NUTRITION`, `READ_SLEEP`, `READ_RESTING_HEART_RATE`), Dateien teilen
+(Export, Fotos) und Erinnerungen an Trainingstagen. Gleicher Signierschlüssel wie 1.2 (Zertifikat-SHA-256
+`5242fd20…6f3f`), APK unter `/downloads/gym-1.3.apk`, Prüfsumme in `version.json`.

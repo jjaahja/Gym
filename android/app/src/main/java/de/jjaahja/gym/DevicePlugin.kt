@@ -53,4 +53,17 @@ class DevicePlugin : Plugin() {
             call.reject("Datei konnte nicht geteilt werden: ${e.message}", null, e)
         }
     }
+
+    /** Inhalt des Startbildschirm-Widgets (label, title, subtitle, footer, progress, max, accentLight, accentDark). */
+    @PluginMethod
+    fun updateWidget(call: PluginCall) {
+        context.getSharedPreferences(GymWidgetProvider.PREFS, android.content.Context.MODE_PRIVATE).edit().apply {
+            for (key in listOf("label", "title", "subtitle", "footer", "accentLight", "accentDark")) putString(key, call.getString(key) ?: "")
+            putInt("progress", call.getInt("progress") ?: 0)
+            putInt("max", call.getInt("max") ?: 0)
+            apply()
+        }
+        GymWidgetProvider.updateAll(context)
+        call.resolve()
+    }
 }

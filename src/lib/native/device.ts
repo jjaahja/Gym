@@ -12,6 +12,8 @@ interface GymDevicePlugin {
   keepAwake(options: { enabled: boolean }): Promise<void>;
   /** ab App 1.3 */
   shareFile(options: { name: string; mime: string; data: string }): Promise<void>;
+  /** ab App 1.3: Inhalt des Startbildschirm-Widgets */
+  updateWidget(options: Record<string, string | number>): Promise<void>;
 }
 
 // Plugins als Objekt zurückgeben – ein Proxy direkt aus einer async-Funktion würde als Promise behandelt
@@ -163,4 +165,20 @@ export async function saveFile(name: string, blob: Blob): Promise<boolean> {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return true;
+}
+
+let widgetKey: string | null = null;
+
+/** Startbildschirm-Widget aktualisieren (nur wenn sich der Inhalt geändert hat; ältere App-Versionen ignorieren es). */
+export async function updateWidget(content: Record<string, string | number>): Promise<void> {
+  const key = JSON.stringify(content);
+  if (key === widgetKey) return;
+  const { device: plugin } = await native();
+  if (!plugin) return;
+  try {
+    await plugin.updateWidget(content);
+    widgetKey = key;
+  } catch {
+    // App 1.2 kennt das Widget noch nicht
+  }
 }

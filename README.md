@@ -31,6 +31,7 @@ Auf dem Handy: Seite öffnen → „Zum Home-Bildschirm“. Danach läuft die Ap
 - [x] **9. Health Connect & Android-App** (Gewicht und Körperfett z. B. der Withings-Waage automatisch in die Körpermaße, Android-App als Hülle um die Web-App, Datenschutzseite) – [Doku](docs/09-health-connect-android.md)
 - [x] **10. Gewichtsvorschlag, Übung entfernen, Trainings in Health Connect** (Gewicht aus der letzten Leistung, wahlweise Versagen im letzten Satz; Übungen im Training entfernen – nur heute oder aus dem Plan; Trainings mit Sätzen und Kalorien nach Health Connect; tippbares Gewichtsfeld) – [Doku](docs/10-gewichtsvorschlag-entfernen-trainings-health.md)
 - [x] **11. Updates direkt in der Android-App** (Versionsprüfung, Download mit Prüfsumme, System-Installer; Signierschlüssel im Google Drive) – [Doku](docs/09-health-connect-android.md#updates-in-der-app-ab-12)
+- [x] **12. Apple-Design & Funktionspaket** (iOS-Design mit Farbthemen; Training: Wiederholen/+1, Notizen, Aufwärmen, Scheibenrechner, Supersätze, Myo-Reps geführt, RIR-Check; Trainings bearbeiten, Rekorde, Übungsverlauf; Plan selbst bearbeiten; Fortschrittsfotos; Eiweiß, Schlaf & Ruhepuls; Wochenziel, Serie, Monatsrückblick, Erinnerungen; Sync-Probleme sichtbar, Fehlerberichte, Export, Konto löschen; Android-Widget, App 1.3) – [Doku](docs/11-design-und-funktionspaket.md)
 
 ## Tech-Stack
 

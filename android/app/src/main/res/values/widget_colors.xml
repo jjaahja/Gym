@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Startbildschirm-Widget: Farben wie die App (iOS-Systemfarben), dunkel in values-night -->
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_text">#000000</color>
+    <color name="widget_muted">#6E6E73</color>
+    <color name="widget_track">#E5E5EA</color>
+    <color name="widget_accent">#C93C00</color>
+</resources>

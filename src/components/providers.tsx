@@ -9,6 +9,9 @@ import { useHealthExtras } from "@/lib/health/extras";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 import { watchReminders } from "@/lib/reminders";
 import { installErrorCapture } from "@/lib/error-log";
+import { updateWidget } from "@/lib/native/device";
+import { allSessions } from "@/lib/offline/history";
+import { widgetContent } from "@/lib/widget";
 import { getDb } from "@/lib/offline/db";
 import { syncDevice } from "@/lib/offline/device-sync";
 import { useSyncStatus } from "@/lib/offline/sync";
@@ -39,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <HealthConnectSync />
       <ReminderSync />
       <ErrorCapture />
+      <WidgetSync />
       <AppUpdateCheck />
       <ServiceWorkerRegistration />
       {children}
@@ -133,5 +137,44 @@ function ReminderSync() {
 /** Fehler lokal mitschreiben (gesendet wird nur auf Knopfdruck im Profil). */
 function ErrorCapture() {
   useEffect(() => installErrorCapture(), []);
+  return null;
+}
+
+/** Android-App: Startbildschirm-Widget nach jeder Änderung (Plan, Training, Einstellungen) und beim Öffnen aktualisieren. */
+function WidgetSync() {
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const { weeklyGoal, accent } = useSettings.getState();
+        const content = widgetContent({
+          plan: planStore.getState().plan,
+          sessions: await allSessions(getDb()),
+          running: Boolean(workoutStore.getState().session),
+          weeklyGoal,
+          accent,
+          now: new Date(),
+        });
+        await updateWidget({ ...content });
+      }, 800);
+    };
+    refresh();
+    const subscriptions = [
+      planStore.subscribe(refresh),
+      workoutStore.subscribe((s, prev) => Boolean(s.session) !== Boolean(prev.session) && refresh()),
+      useSettings.subscribe(refresh),
+    ];
+    const sessions = liveQuery(() => getDb().sessions.count()).subscribe({ next: refresh });
+    const onVisible = () => document.visibilityState === "hidden" && refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearTimeout(timer);
+      subscriptions.forEach((unsubscribe) => unsubscribe());
+      sessions.unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
   return null;
 }

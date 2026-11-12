@@ -11,7 +11,8 @@ import { getMuscle, primaryMuscles, type Exercise } from "@/lib/catalog";
 import type { EffortScale, ExperienceLevel, SetType, TrainingGoal, UnitSystem } from "@/lib/db/enums";
 import { SET_TYPE_LABELS } from "@/lib/labels";
 import { getDb } from "@/lib/offline/db";
-import { lastPerformance } from "@/lib/offline/history";
+import { lastPerformance, sessionsWithExercise } from "@/lib/offline/history";
+import { bestsFrom, recordsToday } from "@/lib/training/records";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { formatGuidelineMessage, resolveExerciseGuidelines, resolveMuscleGuidelines } from "@/lib/science";
 import { formatEffort, rirToRpe } from "@/lib/training/effort";
@@ -135,6 +136,9 @@ export function ExerciseCard({
   const lastTop = lastWorking.length ? Math.max(...lastWorking.map((s) => s.weightKg ?? 0)) : null;
 
   const sets = log?.sets ?? [];
+  // Rekorde: gegen alle früheren Trainings mit dieser Übung
+  const history = useLiveQuery(() => sessionsWithExercise(getDb(), exercise.id), [exercise.id], null);
+  const records = history ? recordsToday(sets, bestsFrom(history, exercise.id, sessionId)) : new Map();
   const working = sets.filter((s) => s.setType === "working");
   const done = working.length >= p.sets;
   // Gewicht aus der bisherigen Leistung (nicht in der Deload-Woche und nicht bei Körpergewichtsübungen mit Zusatzlast)
@@ -349,7 +353,14 @@ export function ExerciseCard({
                   <span className="w-16 shrink-0 text-xs text-muted">
                     {s.setType === "working" ? `Satz ${working.indexOf(s) + 1}` : SET_TYPE_LABELS[s.setType]}
                   </span>
-                  <span className="tabular flex-1 font-medium">{describeSet(s, unit, scale)}</span>
+                  <span className="tabular flex-1 font-medium">
+                    {describeSet(s, unit, scale)}
+                    {records.has(s.id) && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
+                        🏆 {records.get(s.id)!.some((h: { kind: string }) => h.kind === "e1rm") ? "Rekord: 1RM" : "Rekord: Gewicht"}
+                      </span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     aria-label="Satz löschen"

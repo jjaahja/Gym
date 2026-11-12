@@ -188,7 +188,10 @@ function DayDetails({ plan, day }: { plan: StoredPlan; day: CalendarDay }) {
         return (
           <div key={s.id} className="mt-2">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <CheckIcon className="size-5 text-good" /> {name}
+              <CheckIcon className="size-5 text-good" /> <span className="flex-1">{name}</span>
+              <Link href={`/training/${s.id}`} className="text-[0.9375rem] font-medium text-accent">
+                Bearbeiten
+              </Link>
             </h2>
             <p className="text-sm text-muted">
               {minutes} min · {sets} Sätze · {s.exercises.length} Übungen{s.deload ? " · Deload" : ""}

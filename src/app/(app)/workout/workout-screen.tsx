@@ -6,6 +6,9 @@ import { Sheet } from "@/components/sheet";
 import { buttonStyles, ButtonLink, Card } from "@/components/ui";
 import { exercises as catalog, getExerciseById, getMuscle, isExerciseAvailable } from "@/lib/catalog";
 import { getDb } from "@/lib/offline/db";
+import { bestsFrom, recordsToday } from "@/lib/training/records";
+import { useLiveQuery } from "@/lib/offline/use-live-query";
+import { allSessions } from "@/lib/offline/history";
 import { useSyncStatus } from "@/lib/offline/sync";
 import { getCurrentUserId } from "@/lib/supabase/client";
 import { muscleVolume } from "@/lib/training/volume";
@@ -460,11 +463,26 @@ function FinishSheet({ open, onClose, session }: { open: boolean; onClose: () =>
 
 function CompletionSummary() {
   const result = useCompletion((s) => s.result)!;
+  // Neue Rekorde dieses Trainings (gegen alle früheren)
+  const history = useLiveQuery(() => allSessions(getDb()), [], null);
+  const records = history
+    ? result.session.exercises.flatMap((e) => {
+        const hits = recordsToday(e.sets, bestsFrom(history, e.exerciseId, result.session.id));
+        const best = [...hits.values()].flat();
+        const e1rm = best.filter((h) => h.kind === "e1rm").at(-1);
+        const weight = best.filter((h) => h.kind === "weight").at(-1);
+        const name = getExerciseById(e.exerciseId)?.nameDe ?? "Übung";
+        return [
+          ...(e1rm ? [{ key: `${e.logId}-1rm`, text: `${name}: geschätztes 1RM ${e1rm.value.toLocaleString("de-DE", { maximumFractionDigits: 1 })} kg (vorher ${e1rm.previous.toLocaleString("de-DE", { maximumFractionDigits: 1 })})` }] : []),
+          ...(weight ? [{ key: `${e.logId}-w`, text: `${name}: ${weight.value.toLocaleString("de-DE")} kg – so schwer wie noch nie` }] : []),
+        ];
+      })
+    : [];
   const minutes = Math.round((Date.parse(result.session.endedAt) - Date.parse(result.session.startedAt)) / 60000);
   const sets = result.session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.setType !== "warmup").length, 0);
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Stark! Training gespeichert.</h1>
+      <h1 className="text-[2.125rem] font-bold leading-[1.15]">Stark! Training gespeichert.</h1>
       <Card>
         <p className="tabular">
           <span className="text-2xl font-bold">{minutes}</span> min · <span className="text-2xl font-bold">{sets}</span>{" "}
@@ -472,6 +490,16 @@ function CompletionSummary() {
           {result.session.exercises.length === 1 ? "Übung" : "Übungen"}
         </p>
       </Card>
+      {records.length > 0 && (
+        <Card className="bg-warning-bg text-warning-fg">
+          <h2 className="font-semibold">🏆 {records.length === 1 ? "Neuer Rekord" : `${records.length} neue Rekorde`}</h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {records.map((r) => (
+              <li key={r.key}>{r.text}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card>
         <h2 className="font-semibold">Fürs nächste Mal</h2>
         {result.adaptations.length > 0 ? (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ExerciseHistory } from "@/components/exercise-history";
 import { ExerciseVideo } from "@/components/exercise-video";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -109,6 +110,8 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       </header>
 
       <ExerciseVideo slug={exercise.slug} exerciseName={exercise.nameDe} />
+
+      <ExerciseHistory exerciseId={exercise.id} exerciseName={exercise.nameDe} />
 
       <Card>
         <h2 className="text-lg font-semibold">Ausführung</h2>

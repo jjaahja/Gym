@@ -164,7 +164,7 @@ export function ExerciseCard({
 
 
   return (
-    <section className={`rounded-2xl border bg-surface ${expanded ? "border-accent" : "border-border"}`}>
+    <section className={`rounded-[1.125rem] bg-surface shadow-card ${expanded ? "ring-2 ring-accent/70" : ""}`}>
       <button type="button" onClick={onToggle} aria-expanded={expanded} className="flex w-full items-center gap-3 px-4 py-3 text-left">
         <span
           aria-hidden="true"
@@ -199,7 +199,7 @@ export function ExerciseCard({
                 <button
                   type="button"
                   onClick={() => setVideoOpen(true)}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-surface-2 px-3.5 text-[0.9375rem] font-medium text-accent"
                 >
                   <PlayIcon className="size-4 text-accent" /> Ausführung
                 </button>
@@ -208,7 +208,7 @@ export function ExerciseCard({
                 <button
                   type="button"
                   onClick={onSwap}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-surface-2 px-3.5 text-[0.9375rem] font-medium text-accent"
                 >
                   <SwapIcon className="size-4" /> Übung tauschen
                 </button>
@@ -217,7 +217,7 @@ export function ExerciseCard({
                 <button
                   type="button"
                   onClick={onRemove}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm font-medium text-danger"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-surface-2 px-3.5 text-[0.9375rem] font-medium text-danger"
                 >
                   <TrashIcon className="size-4" /> Entfernen
                 </button>
@@ -372,7 +372,7 @@ function ModeChip({ active, onClick, children }: { active: boolean; onClick: () 
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`min-h-10 rounded-full border px-3 font-medium ${active ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
+      className={`min-h-10 rounded-full px-3 font-medium ${active ? "bg-accent text-accent-fg" : "bg-surface-2"}`}
     >
       {children}
     </button>
@@ -448,7 +448,7 @@ function SetEntry({
   }
 
   return (
-    <form ref={formRef} onSubmit={submit} className="scroll-mb-[calc(8.5rem+env(safe-area-inset-bottom))] space-y-3 rounded-xl border border-border p-3">
+    <form ref={formRef} onSubmit={submit} className="scroll-mb-[calc(8.5rem+env(safe-area-inset-bottom))] space-y-3 rounded-[0.875rem] bg-bg p-3">
       <div className="grid grid-cols-2 gap-3">
         {weighted && (
           <NumberField
@@ -494,8 +494,8 @@ function SetEntry({
                 type="button"
                 aria-pressed={rir === value}
                 onClick={() => setRir(rir === value ? null : value)}
-                className={`min-h-11 rounded-lg border text-sm font-semibold ${
-                  rir === value ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+                className={`min-h-11 rounded-lg text-sm font-semibold ${
+                  rir === value ? "bg-accent text-accent-fg" : "bg-surface-2"
                 }`}
               >
                 {scale === "rpe" ? (value === 5 ? "≤5" : rirToRpe(value)) : value === 5 ? "5+" : value}
@@ -537,7 +537,7 @@ function NumberField({
   return (
     <label className="block text-sm font-medium">
       {label}
-      <div className="mt-1 flex items-stretch overflow-hidden rounded-xl border border-border bg-surface focus-within:border-accent">
+      <div className="mt-1 flex items-stretch overflow-hidden rounded-[0.75rem] bg-surface focus-within:ring-2 focus-within:ring-accent">
         <button type="button" onClick={onMinus} aria-label={`${label} verringern`} className="min-w-10 shrink-0 text-xl text-muted">
           −
         </button>
@@ -553,7 +553,7 @@ function NumberField({
             inputMode={inputMode}
             enterKeyHint="done"
             placeholder={placeholder}
-            className="peer tabular min-h-10 w-full min-w-0 rounded-lg border border-dashed border-border bg-surface-2 pl-1 pr-3.5 text-center text-lg font-semibold outline-none focus:border-solid focus:border-accent focus:bg-surface focus:px-1"
+            className="peer tabular min-h-10 w-full min-w-0 rounded-[0.5rem] bg-surface-2 pl-1 pr-3.5 text-center text-lg font-semibold outline-none focus:border-solid focus:border-accent focus:bg-surface focus:px-1"
           />
           <PencilIcon aria-hidden="true" className="pointer-events-none absolute right-1 top-1 size-3 text-muted peer-focus:hidden" />
         </span>
@@ -586,8 +586,8 @@ function Rating({ log }: { log: LoggedExercise }) {
                 type="button"
                 aria-pressed={current === value}
                 onClick={() => rate({ [field]: current === value ? null : value })}
-                className={`min-h-10 rounded-lg border text-xs font-medium ${
-                  current === value ? "border-accent bg-accent text-accent-fg" : "border-border"
+                className={`min-h-10 rounded-lg text-xs font-medium ${
+                  current === value ? "bg-accent text-accent-fg" : "bg-surface-2"
                 }`}
               >
                 {text}

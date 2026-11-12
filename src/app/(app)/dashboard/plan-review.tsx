@@ -83,7 +83,7 @@ function ReviewBody({ plan, review, trained }: { plan: StoredPlan; review: Mesoc
   if (done) return null;
 
   return (
-    <Card className="border-accent">
+    <Card className="ring-1 ring-accent/50">
       <p className="text-xs font-semibold uppercase tracking-wide text-accent">Auswertung</p>
       <h2 className="mt-0.5 text-xl font-bold">Mesozyklus {plan.completedMesocycles + 1} abgeschlossen</h2>
       <p className="text-sm text-muted">
@@ -127,7 +127,7 @@ function ReviewBody({ plan, review, trained }: { plan: StoredPlan; review: Mesoc
           <ul className="mt-1 space-y-2">
             {choices.map((c, i) => (
               <li key={i}>
-                <label className="flex cursor-pointer gap-3 rounded-xl border border-border px-3 py-2 text-sm has-[:checked]:border-accent">
+                <label className="flex cursor-pointer gap-3 rounded-[0.75rem] bg-surface-2 px-3 py-2 text-sm ring-1 ring-transparent has-[:checked]:ring-accent">
                   <input
                     type="checkbox"
                     className="mt-1 size-5 shrink-0 accent-[var(--accent)]"
@@ -169,7 +169,7 @@ export function OpenSuggestions({ plan }: { plan: StoredPlan }) {
   const open = adaptations.filter((a) => a.planId === plan.id && a.status === "suggested");
   if (open.length === 0) return null;
   return (
-    <Card className="border-accent">
+    <Card className="ring-1 ring-accent/50">
       <h2 className="text-lg font-semibold">{open.length === 1 ? "Vorschlag" : `${open.length} Vorschläge`} für deinen Plan</h2>
       <ul className="mt-2 divide-y divide-border">
         {open.map((a) => (

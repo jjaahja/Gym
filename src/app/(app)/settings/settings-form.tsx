@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppUpdateCard } from "@/components/app-update";
+import { ThemePicker } from "@/components/theme-picker";
 import { buttonStyles, Card, Segmented } from "@/components/ui";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import { useHealthSync } from "@/lib/health/use-health-sync";
@@ -53,6 +54,7 @@ export function SettingsForm() {
 
   return (
     <div className="space-y-4">
+      <ThemePicker />
       <Card className="space-y-5">
         <Segmented
           label="Gewichtseinheit"

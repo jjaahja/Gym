@@ -41,7 +41,7 @@ export function StrengthTab({ sessions }: { sessions: readonly CompletedSession[
         <select
           value={exerciseId}
           onChange={(e) => setSelected(e.target.value)}
-          className="block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base"
+          className="field block min-h-12"
         >
           {usage.map((u) => (
             <option key={u.exerciseId} value={u.exerciseId}>

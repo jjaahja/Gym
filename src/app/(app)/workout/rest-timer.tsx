@@ -39,7 +39,7 @@ export function RestTimer() {
       aria-live="polite"
       className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-xl px-3 pb-2"
     >
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-lg">
+      <div className="overflow-hidden rounded-[1.125rem] bg-surface/90 shadow-[0_8px_30px_rgb(0_0_0/0.14)] ring-1 ring-border/50 backdrop-blur-xl">
         <div className="h-1 bg-surface-2">
           <div className="h-full bg-accent transition-[width] duration-200" style={{ width: `${progress * 100}%` }} />
         </div>
@@ -47,7 +47,7 @@ export function RestTimer() {
           <p className={`tabular w-16 shrink-0 text-xl font-bold ${done ? "text-accent" : ""}`}>{done ? "Los!" : format(remaining)}</p>
           <p className="min-w-0 flex-1 truncate text-xs text-muted">{done ? "Pause vorbei – nächster Satz" : hint}</p>
           {!done && (
-            <button type="button" onClick={() => extend(15)} className="min-h-10 rounded-xl border border-border px-3 text-sm font-medium">
+            <button type="button" onClick={() => extend(15)} className="min-h-10 rounded-[0.75rem] bg-surface-2 px-3 text-sm font-medium">
               +15 s
             </button>
           )}

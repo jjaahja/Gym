@@ -36,8 +36,8 @@ export function WeekdayPicker({
               aria-label={weekdayLong(d)}
               disabled={full}
               onClick={() => onChange(on ? value.filter((w) => w !== d) : [...value, d].sort((a, b) => a - b))}
-              className={`flex min-h-12 flex-col items-center justify-center rounded-xl border text-sm font-semibold transition-colors disabled:opacity-35 ${
-                on ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+              className={`flex min-h-12 flex-col items-center justify-center rounded-xl text-sm font-semibold transition-colors disabled:opacity-35 ${
+                on ? "bg-accent text-accent-fg" : "bg-surface-2"
               }`}
             >
               {weekdayShort(d)}

@@ -40,7 +40,7 @@ export function ExerciseVideo({ slug, exerciseName }: { slug: string; exerciseNa
 
   if (!video) {
     return (
-      <div className="flex aspect-video items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-sm text-muted">
+      <div className="flex aspect-video items-center justify-center rounded-[1.125rem] bg-surface-2 text-sm text-muted">
         Für diese Übung gibt es noch kein Video.
       </div>
     );
@@ -61,7 +61,7 @@ export function ExerciseVideo({ slug, exerciseName }: { slug: string; exerciseNa
   };
 
   return (
-    <figure className="overflow-hidden rounded-2xl border border-border bg-black">
+    <figure className="overflow-hidden rounded-[1.125rem] bg-black">
       {show ? (
         <iframe
           className="aspect-video w-full"

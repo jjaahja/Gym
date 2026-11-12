@@ -62,7 +62,7 @@ function Tooltip({ x, width, children }: { x: number; width: number; children: R
   const right = x > width / 2;
   return (
     <div
-      className="pointer-events-none absolute top-1 z-10 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm shadow-lg"
+      className="pointer-events-none absolute top-1 z-10 rounded-[0.625rem] bg-surface px-2.5 py-1.5 text-sm shadow-lg ring-1 ring-border/60"
       style={right ? { right: width - x + 10 } : { left: x + 10 }}
     >
       {children}
@@ -112,7 +112,7 @@ function ChartFrame({
 
 function DataTable({ caption, head, rows }: { caption: string; head: [string, string]; rows: [string, string][] }) {
   return (
-    <div className="max-h-72 overflow-y-auto rounded-xl border border-border">
+    <div className="max-h-72 overflow-y-auto rounded-[0.75rem] ring-1 ring-border">
       <table className="w-full text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="sticky top-0 bg-surface-2 text-left text-muted">

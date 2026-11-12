@@ -239,7 +239,7 @@ export function DayHero({
   return (
     <section
       className={`rounded-3xl p-5 ${
-        hero ? "bg-gradient-to-br from-accent to-[color-mix(in_oklab,var(--accent),#000_22%)] text-accent-fg shadow-lg shadow-accent/20" : "border border-border bg-surface"
+        hero ? "bg-gradient-to-br from-accent to-[color-mix(in_oklab,var(--accent),#000_22%)] text-accent-fg shadow-lg shadow-accent/20" : "bg-surface shadow-card"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -321,7 +321,7 @@ export function PlanDays({ plan, onEditWeekdays }: { plan: StoredPlan; onEditWee
         {days.map((day) => {
           const expanded = open === day.id;
           return (
-            <li key={day.id} className="overflow-hidden rounded-2xl border border-border bg-surface">
+            <li key={day.id} className="overflow-hidden rounded-[1.125rem] bg-surface shadow-card">
               <button
                 type="button"
                 aria-expanded={expanded}
@@ -370,7 +370,7 @@ export function PlanDays({ plan, onEditWeekdays }: { plan: StoredPlan; onEditWee
 
 export function CalendarLink() {
   return (
-    <Link href="/calendar" className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3">
+    <Link href="/calendar" className="flex items-center gap-3 rounded-[1.125rem] bg-surface p-3 shadow-card">
       <span className="flex size-10 items-center justify-center rounded-xl bg-surface-2 text-accent">
         <CalendarIcon className="size-5" />
       </span>

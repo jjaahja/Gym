@@ -30,7 +30,7 @@ function authErrorMessage(error: AuthError): string {
 }
 
 const inputClass =
-  "mt-1 block min-h-12 w-full rounded-xl border border-border bg-surface px-4 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30";
+  "mt-1 field block min-h-12 px-4";
 
 export function LoginForm() {
   const supabase = getSupabaseBrowserClient();
@@ -47,7 +47,7 @@ export function LoginForm() {
 
   if (!supabase) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-4">
+      <div className="rounded-[1.125rem] bg-surface p-4 shadow-card">
         <p className="text-sm">
           Es ist noch kein Supabase-Projekt verbunden. Trag <code>NEXT_PUBLIC_SUPABASE_URL</code> und{" "}
           <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code> in <code>.env.local</code> ein, um Konten zu aktivieren.
@@ -91,7 +91,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-[1.125rem] bg-surface p-4 shadow-card">
       <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1" role="tablist">
         {(["signin", "signup"] as const).map((m) => (
           <button

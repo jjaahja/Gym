@@ -75,8 +75,8 @@ export function VolumeTab({ sessions, plan }: { sessions: readonly CompletedSess
               type="button"
               aria-pressed={a.muscle === muscle}
               onClick={() => setMuscle(a.muscle)}
-              className={`min-h-10 whitespace-nowrap rounded-full border px-3.5 text-sm font-medium ${
-                a.muscle === muscle ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+              className={`min-h-10 whitespace-nowrap rounded-full px-3.5 text-sm font-medium ${
+                a.muscle === muscle ? "bg-accent text-accent-fg" : "bg-surface-2"
               }`}
             >
               {shortMuscleName(getMuscle(a.muscle).nameDe)}

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Profil" };
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Profil & Einstellungen" />
+      <PageHeader title="Profil" />
       <SettingsForm />
     </>
   );

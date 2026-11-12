@@ -49,7 +49,7 @@ export function ExerciseBrowser({ items }: { items: ExerciseListItem[] }) {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Übung oder Muskel suchen"
         aria-label="Übungen durchsuchen"
-        className="block min-h-12 w-full rounded-xl border border-border bg-surface px-4 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+        className="field block min-h-12 px-4"
       />
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Nach Muskelgruppe filtern">
@@ -59,8 +59,8 @@ export function ExerciseBrowser({ items }: { items: ExerciseListItem[] }) {
             type="button"
             aria-pressed={filter === i}
             onClick={() => setFilter(i)}
-            className={`min-h-10 shrink-0 rounded-full border px-4 text-sm font-medium ${
-              filter === i ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface text-muted"
+            className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-medium ${
+              filter === i ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg"
             }`}
           >
             {f.label}
@@ -72,7 +72,7 @@ export function ExerciseBrowser({ items }: { items: ExerciseListItem[] }) {
         {visible.length} {visible.length === 1 ? "Übung" : "Übungen"}
       </p>
 
-      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+      <ul className="divide-y divide-border overflow-hidden rounded-[1.125rem] bg-surface shadow-card">
         {visible.map((item) => (
           <li key={item.slug}>
             <Link href={`/exercises/${item.slug}`} className="flex min-h-16 items-center gap-3 px-4 py-3 active:bg-surface-2">

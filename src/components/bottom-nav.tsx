@@ -17,7 +17,7 @@ export function NavBar({ activePath }: { activePath: string | null }) {
   return (
     <nav
       aria-label="Hauptnavigation"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-surface/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150"
     >
       <ul className="mx-auto grid max-w-xl grid-cols-5">
         {ITEMS.map(({ href, label, Icon }) => {
@@ -27,11 +27,11 @@ export function NavBar({ activePath }: { activePath: string | null }) {
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
-                  active ? "text-accent" : "text-muted hover:text-fg"
+                className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 pt-1.5 text-[0.625rem] font-medium tracking-normal transition-colors ${
+                  active ? "text-accent" : "text-muted/90 hover:text-fg"
                 }`}
               >
-                <Icon className="size-6" />
+                <Icon className="size-[1.6rem]" strokeWidth={active ? 2.2 : 1.8} />
                 {label}
               </Link>
             </li>

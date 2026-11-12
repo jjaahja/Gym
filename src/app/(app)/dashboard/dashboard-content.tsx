@@ -83,15 +83,18 @@ function PlanDashboard({ plan }: { plan: StoredPlan }) {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted">{greeting}</p>
-          <h1 className="text-2xl font-bold tracking-tight">{plan.name.replace(/ · .*$/, "")}</h1>
+      <header className="mb-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[0.8125rem] font-semibold uppercase tracking-wide text-muted">
+            {now.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+          <h1 className="text-[2.125rem] font-bold leading-[1.15]">{greeting}</h1>
+          <p className="truncate text-[0.9375rem] text-muted">{plan.name.replace(/ · .*$/, "")}</p>
         </div>
         <Link
           href="/calendar"
           aria-label="Kalender öffnen"
-          className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-accent"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-accent shadow-card"
         >
           <CalendarIcon className="size-5" />
         </Link>
@@ -107,7 +110,7 @@ function PlanDashboard({ plan }: { plan: StoredPlan }) {
           </>
         ) : (
           <>
-            <Card className="border-accent bg-accent-soft">
+            <Card className="bg-accent-soft">
               <h2 className="font-semibold">Lege deine Trainingstage fest</h2>
               <p className="mt-1 text-sm text-muted">
                 Mit festen Wochentagen siehst du deine Woche auf einen Blick, im Kalender und als Erinnerung im Handy-Kalender.
@@ -138,7 +141,7 @@ function PlanDashboard({ plan }: { plan: StoredPlan }) {
         <CalendarLink />
         <AdaptationLog plan={plan} />
         {plan.warnings.length > 0 && (
-          <details className="rounded-2xl border border-border bg-surface p-4">
+          <details className="rounded-[1.125rem] bg-surface p-4 shadow-card">
             <summary className="cursor-pointer font-semibold">Hinweise zum Plan ({plan.warnings.length})</summary>
             <ul className="mt-2 space-y-2 text-sm text-muted">
               {plan.warnings.map((w) => (

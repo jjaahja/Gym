@@ -52,8 +52,8 @@ function OptionCard({
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`w-full rounded-2xl border p-4 text-left transition-colors ${
-        selected ? "border-accent bg-accent-soft" : "border-border bg-surface"
+      className={`w-full rounded-2xl p-4 text-left transition-colors ${
+        selected ? "bg-accent-soft ring-2 ring-accent" : "bg-surface shadow-card"
       }`}
     >
       <span className="block font-semibold">{title}</span>
@@ -69,8 +69,8 @@ function Chip({ selected, onClick, children, disabled }: { selected: boolean; on
       aria-pressed={selected}
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-11 rounded-full border px-4 text-sm font-medium disabled:opacity-40 ${
-        selected ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+      className={`min-h-11 rounded-full px-4 text-sm font-medium disabled:opacity-40 ${
+        selected ? "bg-accent text-accent-fg" : "bg-surface-2"
       }`}
     >
       {children}
@@ -151,8 +151,8 @@ function TimeStep({ draft, update, weekdays, setWeekdays }: StepProps & { weekda
               type="button"
               aria-pressed={draft.daysPerWeek === d}
               onClick={() => update({ daysPerWeek: d })}
-              className={`min-h-12 rounded-xl border text-lg font-semibold ${
-                draft.daysPerWeek === d ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+              className={`min-h-12 rounded-xl text-lg font-semibold ${
+                draft.daysPerWeek === d ? "bg-accent text-accent-fg" : "bg-surface-2"
               }`}
             >
               {d}
@@ -307,7 +307,7 @@ function DetailsStep({ draft, update }: StepProps) {
           onChange={(e) => update({ limitations: e.target.value })}
           rows={3}
           placeholder="z. B. Schulter rechts empfindlich bei Überkopfübungen"
-          className="mt-1 block w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-accent"
+          className="field mt-1 block py-3"
         />
       </label>
       <p className="text-sm text-muted">

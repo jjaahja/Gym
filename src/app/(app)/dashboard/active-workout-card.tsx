@@ -9,7 +9,7 @@ export function ActiveWorkoutCard() {
 
   const sets = session.exercises.reduce((sum, e) => sum + e.sets.length, 0);
   return (
-    <Card className="border-accent">
+    <Card className="ring-1 ring-accent/50">
       <p className="text-xs font-semibold uppercase tracking-wide text-accent">Training läuft</p>
       <p className="mt-1 text-sm text-muted">
         {session.exercises.length} Übungen · {sets} Sätze

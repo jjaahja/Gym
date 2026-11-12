@@ -81,8 +81,8 @@ function StartWorkout() {
                   type="button"
                   disabled={starting}
                   onClick={() => start(day.id)}
-                  className={`flex min-h-14 w-full items-center justify-between rounded-xl border px-4 text-left ${
-                    next ? "border-accent bg-accent-soft" : "border-border"
+                  className={`flex min-h-14 w-full items-center justify-between rounded-xl px-4 text-left ${
+                    next ? "bg-accent-soft ring-2 ring-accent" : "bg-surface-2"
                   }`}
                 >
                   <span>
@@ -189,7 +189,7 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
       </div>
 
       {session.deload && (
-        <Card className="border-accent bg-accent-soft">
+        <Card className="bg-accent-soft">
           <p className="text-sm font-semibold">Deload-Woche</p>
           <p className="mt-0.5 text-sm text-muted">
             Etwa halbe Sätze, 3–4 Wiederholungen im Tank, gleiche Übungen. Gewichte bleiben – so baust du Ermüdung ab,
@@ -296,7 +296,7 @@ function AddExerciseSheet({
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Übung suchen"
         aria-label="Übung suchen"
-        className="block min-h-12 w-full rounded-xl border border-border bg-surface px-4 text-base outline-none focus:border-accent"
+        className="field block min-h-12 px-4"
       />
       <ul className="mt-3 divide-y divide-border">
         {options.map((e) => (
@@ -379,7 +379,7 @@ function FinishSheet({ open, onClose, session }: { open: boolean; onClose: () =>
                   type="button"
                   aria-pressed={rpe === v}
                   onClick={() => setRpe(rpe === v ? null : v)}
-                  className={`min-h-11 rounded-lg border font-semibold ${rpe === v ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
+                  className={`min-h-11 rounded-lg font-semibold ${rpe === v ? "bg-accent text-accent-fg" : "bg-surface-2"}`}
                 >
                   {v}
                 </button>
@@ -429,7 +429,7 @@ function CompletionSummary() {
         )}
       </Card>
       {result.suggestions.length > 0 && (
-        <Card className="border-accent">
+        <Card className="ring-1 ring-accent/50">
           <h2 className="font-semibold">{result.suggestions.length === 1 ? "Ein Vorschlag" : `${result.suggestions.length} Vorschläge`} für deinen Plan</h2>
           <ul className="mt-2 space-y-2 text-sm">
             {result.suggestions.map((a) => (

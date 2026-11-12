@@ -96,7 +96,7 @@ export function SubscriptionSheet({ open, onClose }: { open: boolean; onClose: (
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value || "18:00")}
-                className="block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base"
+                className="field block min-h-12"
               />
             </label>
             <label className="block">
@@ -104,7 +104,7 @@ export function SubscriptionSheet({ open, onClose }: { open: boolean; onClose: (
               <select
                 value={reminder}
                 onChange={(e) => setReminder(Number(e.target.value))}
-                className="block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base"
+                className="field block min-h-12"
               >
                 {REMINDERS.map((m) => (
                   <option key={m} value={m}>
@@ -156,7 +156,7 @@ export function SubscriptionSheet({ open, onClose }: { open: boolean; onClose: (
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  className="min-h-11 rounded-xl border border-border text-sm font-medium"
+                  className="min-h-11 rounded-[0.75rem] bg-surface-2 text-sm font-medium text-accent"
                   disabled={busy}
                   onClick={() => window.confirm("Neuen Link erzeugen? Der bisherige funktioniert dann nicht mehr.") && save(true)}
                 >
@@ -164,7 +164,7 @@ export function SubscriptionSheet({ open, onClose }: { open: boolean; onClose: (
                 </button>
                 <button
                   type="button"
-                  className="min-h-11 rounded-xl border border-border text-sm font-medium text-danger"
+                  className="min-h-11 rounded-[0.75rem] bg-surface-2 text-sm font-medium text-danger"
                   disabled={busy}
                   onClick={() => window.confirm("Abo beenden? Der Link funktioniert dann nicht mehr.") && remove()}
                 >

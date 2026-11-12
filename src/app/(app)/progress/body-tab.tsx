@@ -67,8 +67,8 @@ export function BodyTab({ measurements }: { measurements: readonly Measurement[]
                   type="button"
                   aria-pressed={f.key === field.key}
                   onClick={() => setSelected(f.key)}
-                  className={`min-h-10 whitespace-nowrap rounded-full border px-3.5 text-sm font-medium ${
-                    f.key === field.key ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface"
+                  className={`min-h-10 whitespace-nowrap rounded-full px-3.5 text-sm font-medium ${
+                    f.key === field.key ? "bg-accent text-accent-fg" : "bg-surface-2"
                   }`}
                 >
                   {f.label}
@@ -236,7 +236,7 @@ function MeasurementForm({ measurements, unit }: { measurements: readonly Measur
                 setNotes(null);
                 setSaved(false);
               }}
-              className="min-h-11 rounded-lg border border-border bg-surface px-2"
+              className="field min-h-11 w-auto px-2"
             />
           </label>
         </div>
@@ -259,7 +259,7 @@ function MeasurementForm({ measurements, unit }: { measurements: readonly Measur
                   setSaved(false);
                   setError(null);
                 }}
-                className="tabular block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base outline-none focus:border-accent"
+                className="tabular field block min-h-12"
               />
             </label>
           ))}
@@ -270,7 +270,7 @@ function MeasurementForm({ measurements, unit }: { measurements: readonly Measur
             value={notes ?? existing?.notes ?? ""}
             onChange={(e) => setNotes(e.target.value)}
             maxLength={500}
-            className="block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base outline-none focus:border-accent"
+            className="field block min-h-12"
           />
         </label>
         {error && (

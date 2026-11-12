@@ -113,7 +113,7 @@ export function SwapSheet({
                       type="button"
                       aria-pressed={isSelected}
                       onClick={() => setSelected(a.exercise.slug)}
-                      className={`w-full rounded-2xl border p-3 text-left transition-colors ${isSelected ? "border-accent bg-accent-soft" : "border-border"}`}
+                      className={`w-full rounded-2xl p-3 text-left transition-colors ${isSelected ? "bg-accent-soft ring-2 ring-accent" : "bg-surface-2"}`}
                     >
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="font-semibold">{a.exercise.nameDe}</span>
@@ -142,7 +142,7 @@ export function SwapSheet({
         </fieldset>
 
         {selected && canSwap && (
-          <div className="space-y-3 rounded-2xl border border-border p-3">
+          <div className="space-y-3 rounded-[1.125rem] bg-surface p-3 shadow-card">
             <fieldset>
               <legend className="mb-2 text-sm font-medium">Wie lange?</legend>
               <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">

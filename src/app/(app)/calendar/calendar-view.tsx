@@ -257,7 +257,7 @@ function ExportSheet({ plan, open, onClose }: { plan: StoredPlan; open: boolean;
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value || "18:00")}
-            className="block min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base"
+            className="field block min-h-12"
           />
         </label>
         <fieldset>
@@ -269,7 +269,7 @@ function ExportSheet({ plan, open, onClose }: { plan: StoredPlan; open: boolean;
                 type="button"
                 aria-pressed={reminder === m}
                 onClick={() => setReminder(m)}
-                className={`min-h-11 rounded-lg border text-sm font-medium ${reminder === m ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
+                className={`min-h-11 rounded-lg text-sm font-medium ${reminder === m ? "bg-accent text-accent-fg" : "bg-surface-2"}`}
               >
                 {m === 0 ? "keine" : m === 60 ? "1 h" : `${m} min`}
               </button>

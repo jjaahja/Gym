@@ -30,15 +30,24 @@ export function Sheet({
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       aria-label={title}
-      className="m-0 mt-auto max-h-[90dvh] w-full max-w-none overflow-y-auto rounded-t-3xl border-t border-border bg-surface p-0 text-fg backdrop:bg-black/60 sm:mx-auto sm:max-w-xl"
+      className="m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-[1.25rem] bg-bg p-0 text-fg backdrop:bg-black/40 sm:mx-auto sm:max-w-xl"
     >
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface px-4 py-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <button type="button" onClick={onClose} className="min-h-11 min-w-11 rounded-full text-2xl text-muted" aria-label="Schließen">
-          ×
-        </button>
+      {/* iOS-Sheet: Griff, zentrierter Titel, „Fertig“ */}
+      <div className="sticky top-0 z-10 bg-bg/85 px-4 pb-2 pt-2 backdrop-blur-xl">
+        <div aria-hidden="true" className="mx-auto mb-2 h-[5px] w-9 rounded-full bg-muted/40" />
+        <div className="relative flex min-h-9 items-center justify-center">
+          <h2 className="max-w-[70%] truncate text-[1.0625rem] font-semibold">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-0 min-h-11 px-1 text-[1.0625rem] font-semibold text-accent"
+            aria-label="Schließen"
+          >
+            Fertig
+          </button>
+        </div>
       </div>
-      <div className="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4">{children}</div>
+      <div className="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-2">{children}</div>
     </dialog>
   );
 }

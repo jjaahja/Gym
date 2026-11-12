@@ -20,6 +20,26 @@ export default function PrivacyPage() {
         <li>Konto: E-Mail-Adresse und Passwort (verschlüsselt gespeichert).</li>
         <li>Training: Fragebogen, Trainingsplan, Trainings mit Sätzen, Gewichten und Feedback.</li>
         <li>Körpermaße: Gewicht, Körperfett und Umfänge, die du einträgst oder aus Health Connect übernimmst.</li>
+        <li>Notizen zu Übungen und – falls du sie einträgst – Eiweiß und Kalorien pro Tag.</li>
+        <li>
+          Fortschrittsfotos, die du selbst aufnimmst oder auswählst (verkleinert auf höchstens 1600 Pixel, ohne
+          Standortdaten).
+        </li>
+      </ul>
+
+      <h2>Kamera und Fortschrittsfotos</h2>
+      <ul>
+        <li>
+          Die Kamera wird nur geöffnet, wenn du unter Fortschritt → Körper → Fortschrittsfotos „Foto aufnehmen“ tippst –
+          und erst nach deiner Freigabe. Es werden keine Videos gespeichert, nur das Foto, das du mit „Foto verwenden“
+          bestätigst.
+        </li>
+        <li>
+          Fotos liegen auf deinem Gerät und – mit Konto – in einem privaten Speicher (Supabase Storage, Frankfurt am
+          Main), in einem Ordner, auf den per Zugriffsregel nur dein Konto zugreifen kann. Es gibt keine öffentlichen
+          Links.
+        </li>
+        <li>Löschen: Foto antippen → „Foto löschen“ entfernt es auf allen Geräten und im Speicher.</li>
       </ul>
 
       <h2>Health Connect (Android-App)</h2>

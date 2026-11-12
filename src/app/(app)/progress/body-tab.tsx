@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { LineChart, StatTile } from "@/components/charts";
-import { buttonStyles, Card } from "@/components/ui";
+import { CameraIcon } from "@/components/icons";
+import { buttonStyles, Card, List, ListRow } from "@/components/ui";
 import type { Measurement } from "@/lib/offline/db";
 import { getDb } from "@/lib/offline/db";
 import { deleteMeasurement, MEASURE_FIELDS, saveMeasurement, type MeasureKey, type MeasurementInput } from "@/lib/offline/measurements";
@@ -54,6 +55,14 @@ export function BodyTab({ measurements }: { measurements: readonly Measurement[]
 
   return (
     <div className="space-y-4">
+      <List>
+        <ListRow
+          href="/progress/photos"
+          icon={<CameraIcon className="size-[1.125rem]" />}
+          title="Fortschrittsfotos"
+          subtitle="Aufnehmen mit Vorlage, Vorher/Nachher vergleichen"
+        />
+      </List>
       <HealthConnectCard />
       <MeasurementForm measurements={measurements} unit={unit} />
 

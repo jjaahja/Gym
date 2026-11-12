@@ -32,7 +32,8 @@ const columnsOf = (row: Record<string, unknown>) => Object.keys(row).sort().join
 export function nextBatch(entries: readonly OutboxEntry[]): OutboxEntry[] {
   const first = entries[0];
   if (!first) return [];
-  if (first.op !== "upsert") return [first];
+  // Dateien einzeln (Storage-API, keine Zeilen)
+  if (first.op !== "upsert" || first.table === "photo_files") return [first];
   const columns = columnsOf(first.payload);
   const batch: OutboxEntry[] = [];
   for (const e of entries) {
@@ -136,9 +137,23 @@ export function flushOutboxOnce(db: GymDB, backend: SyncBackend): Promise<FlushR
   return running;
 }
 
-export function supabaseBackend(client: SupabaseClient): SyncBackend {
+/** Privater Speicher der Fortschrittsfotos (Ordner je Nutzer, siehe Migration 20261112000000) */
+export const PHOTO_BUCKET = "progress-photos";
+
+export function supabaseBackend(
+  client: SupabaseClient,
+  files: { photoBlob?: (id: string) => Promise<Blob | undefined> } = {},
+): SyncBackend {
   return {
     async upsert(table, row) {
+      if (table === "photo_files") {
+        // Datei inzwischen lokal gelöscht → nichts mehr hochzuladen
+        const blob = await files.photoBlob?.(String(row.id));
+        if (!blob) return;
+        const { error } = await client.storage.from(PHOTO_BUCKET).upload(String(row.path), blob, { upsert: true, contentType: "image/jpeg" });
+        if (error) throw new Error(error.message);
+        return;
+      }
       const { error } = await client.from(table).upsert(row);
       if (error) throw new Error(error.message);
     },
@@ -148,6 +163,11 @@ export function supabaseBackend(client: SupabaseClient): SyncBackend {
       if (error) throw new Error(error.message);
     },
     async remove(table, match) {
+      if (table === "photo_files") {
+        const { error } = await client.storage.from(PHOTO_BUCKET).remove([String(match.path)]);
+        if (error) throw new Error(error.message);
+        return;
+      }
       const { error } = await client.from(table).delete().match(match);
       if (error) throw new Error(error.message);
     },

@@ -103,6 +103,7 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   const measuresBefore = new Map((await db.measurements.toArray()).map((m) => [m.id, m]));
   const notesBefore = new Map((await db.notes.toArray()).map((n) => [n.exerciseId, n]));
   const nutritionBefore = new Map((await db.nutrition.toArray()).map((n) => [n.day, n]));
+  const photosBefore = new Set(await db.photos.toCollection().primaryKeys());
 
   const remote = await deps.fetch();
   await deps.settle?.();
@@ -157,14 +158,18 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
       );
     });
   }
-  // Fotos: Metadaten übernehmen, lokale Dateien behalten; auf anderen Geräten gelöschte entfernen
+  // Fotos: Metadaten übernehmen, lokale Dateien behalten; auf anderen Geräten gelöschte entfernen.
+  // Ausstehende (Upload oder Löschen in der Outbox) und während des Abrufs aufgenommene bleiben unangetastet.
   if (remote.photos) {
-    const remoteIds = new Set(remote.photos.map((p) => p.id));
+    const pendingPhotos = new Set(pending.filter((e) => e.table === "progress_photos" || e.table === "photo_files").map((e) => e.rowId));
+    const incoming = remote.photos.filter((p) => !pendingPhotos.has(p.id));
     await db.transaction("rw", db.photos, async () => {
       const local = new Map((await db.photos.toArray()).map((p) => [p.id, p]));
-      for (const p of local.values()) if (!p.pending && !remoteIds.has(p.id)) await db.photos.delete(p.id);
+      const remoteIds = new Set(remote.photos!.map((p) => p.id));
+      const stale = [...local.values()].filter((p) => !pendingPhotos.has(p.id) && !remoteIds.has(p.id) && photosBefore.has(p.id));
+      await db.photos.bulkDelete(stale.map((p) => p.id));
       await db.photos.bulkPut(
-        remote.photos!.map((p) => ({
+        incoming.map((p) => ({
           ...local.get(p.id),
           id: p.id,
           takenOn: p.taken_on,
@@ -173,7 +178,6 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
           width: p.width,
           height: p.height,
           createdAt: p.created_at,
-          pending: false,
         })),
       );
     });

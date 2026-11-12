@@ -51,3 +51,19 @@ Plan → Trainingstag aufklappen → „Bearbeiten“.
   Umsortieren vergibt die App deshalb Positionen, die keine bisherige belegt (abwechselnd ab 0 bzw. hinter dem
   Maximum) – so klappt die Übertragung einzeln wie gebündelt. Geprüft mit `scripts/verify-plan-edit.ts` gegen
   Postgres (inkl. Gegenprobe: mit Positionen 0…n scheitert derselbe Ablauf an `plan_exercises_plan_day_id_order_index_key`).
+
+## Fortschrittsfotos (`/progress/photos`, `src/lib/photos.ts`)
+
+Fortschritt → Körper → „Fortschrittsfotos“.
+
+- **Aufnehmen:** Pose wählen (vorne, Seite, hinten), Hilfslinien für Kopf und Füße (gleicher Abstand), das letzte Foto
+  derselben Pose halbtransparent als **Vorlage**, **Selbstauslöser** (3 oder 10 s) zum Abstellen des Handys. Hochformat
+  3:4 wie in der Vorschau, Frontkamera gespiegelt wie ein Spiegel. Ohne Kamera(-Freigabe) oder für ältere Fotos:
+  „Galerie“, Datum anpassbar.
+- **Vergleich:** ältestes und neuestes Foto der Pose mit Schieberegler (links vorher, rechts nachher), beide frei
+  wählbar, Zeitspanne und – wenn am selben Tag (± 3 Tage) gemessen – das Körpergewicht.
+- **Speicher:** verkleinert auf höchstens 1600 px (JPEG, meist < 500 KB), lokal in IndexedDB. Mit Konto über die
+  Outbox in den privaten Bucket `progress-photos` (Ordner `<user_id>/`, Zugriffsregeln nur für den Besitzer) und als
+  Zeile in `progress_photos`. Reihenfolge: erst die Datei (Pseudo-Tabelle `photo_files`), dann die Zeile – andere
+  Geräte sehen nie eine Zeile ohne Datei; beim Löschen umgekehrt. Andere Geräte laden die Datei erst beim Anzeigen.
+- **Android:** Kamera-Berechtigung (`CAMERA`, ab APK 1.3); Capacitor reicht die Anfrage der Web-Ansicht weiter.

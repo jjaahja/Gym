@@ -19,7 +19,9 @@ export type SyncTable =
   | "body_measurements"
   | "exercise_notes"
   | "nutrition_days"
-  | "progress_photos";
+  | "progress_photos"
+  /** Bilddatei im privaten Speicher (kein DB-Table): Upload bzw. Löschen über die Storage-API */
+  | "photo_files";
 
 export interface OutboxEntry {
   seq?: number;
@@ -117,8 +119,6 @@ export interface ProgressPhoto {
   height: number | null;
   /** verkleinertes JPEG; fehlt bei Fotos von anderen Geräten, bis es geladen wurde */
   blob?: Blob;
-  /** noch nicht hochgeladen */
-  pending?: boolean;
   createdAt: string;
 }
 

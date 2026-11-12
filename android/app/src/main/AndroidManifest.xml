@@ -41,6 +41,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Updates direkt aus der App installieren (Nutzer muss es einmalig erlauben) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Fortschrittsfotos: Kamera in der Web-Ansicht (getUserMedia), nur nach Freigabe -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Health Connect: Gewicht und Körperfett lesen (+ Messungen älter als 30 Tage beim ersten Abgleich) -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />

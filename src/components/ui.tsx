@@ -57,15 +57,22 @@ export function Segmented<T extends string>({
   options,
   onChange,
   columns = options.length,
+  variant = "default",
 }: {
   label?: string;
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
   columns?: number;
+  /** „overlay“: auf dunklem Kamerabild (immer helle Schrift) */
+  variant?: "default" | "overlay";
 }) {
+  const overlay = variant === "overlay";
   const buttons = (
-    <div className="grid gap-0.5 rounded-[0.6rem] bg-surface-2 p-0.5" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+    <div
+      className={`grid gap-0.5 rounded-[0.6rem] p-0.5 ${overlay ? "bg-white/15" : "bg-surface-2"}`}
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+    >
       {options.map((option) => (
         <button
           key={option.value}
@@ -73,7 +80,13 @@ export function Segmented<T extends string>({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={`min-h-9 rounded-[0.5rem] px-1 text-[0.8125rem] font-semibold leading-tight transition-colors ${
-            value === option.value ? "bg-thumb text-fg shadow-[0_1px_3px_rgb(0_0_0/0.12),0_1px_1px_rgb(0_0_0/0.04)]" : "text-fg/75 hover:text-fg"
+            overlay
+              ? value === option.value
+                ? "bg-white/35 text-white"
+                : "text-white/80"
+              : value === option.value
+                ? "bg-thumb text-fg shadow-[0_1px_3px_rgb(0_0_0/0.12),0_1px_1px_rgb(0_0_0/0.04)]"
+                : "text-fg/75 hover:text-fg"
           }`}
         >
           {option.label}

@@ -137,3 +137,16 @@ Neu gegenüber 1.2 (Update über Profil → App-Version): Widget, Kamera für Fo
 lesen für Ernährung, Schlaf und Ruhepuls (`READ_NUTRITION`, `READ_SLEEP`, `READ_RESTING_HEART_RATE`), Dateien teilen
 (Export, Fotos) und Erinnerungen an Trainingstagen. Gleicher Signierschlüssel wie 1.2 (Zertifikat-SHA-256
 `5242fd20…6f3f`), APK unter `/downloads/gym-1.3.apk`, Prüfsumme in `version.json`.
+
+## Verifiziert (12.11.2026)
+
+- 366 Unit-Tests; E2E (Playwright, iPhone/Pixel, hell und dunkel): Training, Rekorde, Plan-Editor, Fotos (Fake-Kamera),
+  Wissenschaft, Health Connect (simulierte Android-Brücke), Motivation, Konto/Export, Widget – alle grün.
+- Postgres lokal: alle Migrationen frisch in Reihenfolge; Plan-Bearbeitung einzeln und gebündelt
+  (`scripts/verify-plan-edit.ts`, inkl. Gegenprobe); RLS der neuen Tabellen.
+- Live (Supabase): Migrationen `20261112000000–02` angewendet; Zugriffsregeln mit temporärem Nutzer in einer
+  zurückgerollten Transaktion geprüft (nur eigene Daten, Fehlerberichte nicht lesbar, fremde Pfade abgelehnt,
+  Konto-Löschen entfernt alle Daten, andere Nutzer unberührt, keine Reste).
+- Live (Vercel): `/downloads/version.json` = 1.3, APK-Prüfsumme stimmt, Login mit „Passwort vergessen?“, Datenschutz.
+- Nicht auf echtem Gerät geprüft: Widget, Kamera in der App, Health-Connect-Lesen, Teilen-Menü (kein Emulator in
+  dieser Umgebung) – Kotlin kompiliert, Berechtigungen und Widget-Receiver stehen im APK.

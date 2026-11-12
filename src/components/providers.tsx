@@ -5,6 +5,7 @@ import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
 import { AppUpdateCheck } from "@/components/app-update";
 import { isAndroidApp } from "@/lib/health/health-connect";
+import { useHealthExtras } from "@/lib/health/extras";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 import { getDb } from "@/lib/offline/db";
 import { syncDevice } from "@/lib/offline/device-sync";
@@ -88,7 +89,12 @@ function HealthConnectSync() {
     if (!isAndroidApp()) return;
     const health = useHealthSync.getState();
     health.load();
-    const run = () => void useHealthSync.getState().autoSync();
+    // Ernährung, Schlaf, Ruhepuls (ab App 1.3; höchstens alle 30 Minuten)
+    void useHealthExtras.getState().load().then(() => useHealthExtras.getState().refresh());
+    const run = () => {
+      void useHealthSync.getState().autoSync();
+      void useHealthExtras.getState().refresh();
+    };
     const unsubscribe = useSyncStatus.subscribe((s, prev) => s.firstPull === "done" && prev.firstPull !== "done" && run());
     const onVisible = () => document.visibilityState === "visible" && run();
     run();

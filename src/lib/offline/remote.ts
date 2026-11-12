@@ -178,6 +178,17 @@ export interface RemotePhoto {
   created_at: string;
 }
 
+export interface RemoteCalibration {
+  id: Id;
+  exercise_id: Id;
+  performed_on: string;
+  weight_kg: number | string | null;
+  stop_reps: number;
+  predicted_rir: number | string;
+  failure_reps: number;
+  created_at: string;
+}
+
 /** Alles, was ein Gerät für den Start braucht. */
 export interface RemoteState {
   profile: RemoteProfile | null;
@@ -191,6 +202,7 @@ export interface RemoteState {
   notes?: RemoteNote[];
   nutrition?: RemoteNutrition[];
   photos?: RemotePhoto[];
+  calibrations?: RemoteCalibration[];
 }
 
 // ─────────────────────────── Zuordnung Katalog-ID → Slug ───────────────────────────
@@ -429,13 +441,20 @@ export async function fetchRemoteState(client: SupabaseClient, userId: string): 
       return undefined;
     }
   };
-  const [notes, nutrition, photos] = await Promise.all([
+  const [notes, nutrition, photos, calibrations] = await Promise.all([
     optional<RemoteNote>((from, to) => client.from("exercise_notes").select("exercise_id, note, updated_at").range(from, to)),
     optional<RemoteNutrition>((from, to) =>
       client.from("nutrition_days").select("day, protein_g, energy_kcal, source, updated_at").order("day").range(from, to),
     ),
     optional<RemotePhoto>((from, to) =>
       client.from("progress_photos").select("id, taken_on, pose, storage_path, width, height, created_at").order("taken_on").range(from, to),
+    ),
+    optional<RemoteCalibration>((from, to) =>
+      client
+        .from("rir_calibrations")
+        .select("id, exercise_id, performed_on, weight_kg, stop_reps, predicted_rir, failure_reps, created_at")
+        .order("created_at")
+        .range(from, to),
     ),
   ]);
 
@@ -462,5 +481,6 @@ export async function fetchRemoteState(client: SupabaseClient, userId: string): 
     notes,
     nutrition,
     photos,
+    calibrations,
   };
 }

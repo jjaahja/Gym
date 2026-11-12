@@ -3,6 +3,8 @@ import { localDay } from "@/lib/training/schedule";
 import { isAndroidApp } from "./health-connect";
 import { buildWorkoutPayload, type WorkoutPayload } from "./workout-export";
 
+import { gymHealthPlugin } from "./gym-health-plugin";
+
 // Trainings nach Health Connect schreiben (Android-App ab Version 1.1, eigenes Plugin „GymHealth“).
 // Jedes Training genau einmal; Health Connect führt sie über die clientRecordId ohnehin nicht doppelt.
 
@@ -51,13 +53,7 @@ interface GymHealthPlugin {
   writeWorkout(payload: WorkoutPayload): Promise<WriteResult>;
 }
 
-let registered: GymHealthPlugin | null = null;
-// Als Objekt zurückgeben – ein Plugin-Proxy direkt aus einer async-Funktion würde als Promise behandelt
-async function gymHealth(): Promise<{ available: boolean; plugin: GymHealthPlugin }> {
-  const { Capacitor, registerPlugin } = await import("@capacitor/core");
-  registered ??= registerPlugin<GymHealthPlugin>("GymHealth");
-  return { available: Capacitor.isPluginAvailable("GymHealth"), plugin: registered };
-}
+const gymHealth = () => gymHealthPlugin<GymHealthPlugin>();
 
 /** Kann diese App-Version Trainings schreiben? (false in der App 1.0 und im Browser) */
 export async function workoutWriteSupported(): Promise<boolean> {

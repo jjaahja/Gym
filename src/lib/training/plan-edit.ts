@@ -118,3 +118,11 @@ export const TECHNIQUE_HOWTO: Record<(typeof TECHNIQUES)[number], string> = {
   rest_pause: "Nach dem letzten Satz 15–20 Sekunden durchatmen, dann mit demselben Gewicht noch einmal so viele Wdh. wie möglich (1–2 Mal).",
   lengthened_partials: "Wenn keine volle Wdh. mehr geht: weiter mit halben Wiederholungen in der gedehnten Position, bis auch die nicht mehr gehen.",
 };
+
+/** Pause vor dem Technik-Satz bzw. zwischen Mini-Sätzen (Sekunden; 0 = direkt weiter). */
+export const TECHNIQUE_REST_SECONDS: Record<(typeof TECHNIQUES)[number], number> = {
+  myo_reps: 15,
+  rest_pause: 20,
+  dropset: 10,
+  lengthened_partials: 0,
+};

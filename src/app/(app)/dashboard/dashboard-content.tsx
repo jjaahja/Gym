@@ -16,6 +16,7 @@ import { useNow } from "@/lib/use-now";
 import { mesocyclePosition, type StoredPlan } from "@/stores/plan-store";
 import { usePlan, usePlanHydrated } from "@/stores/plan";
 import { ActiveWorkoutCard } from "./active-workout-card";
+import { ProteinCard, RecoveryCard } from "./daily-cards";
 import { AdaptationLog, MesocycleReviewCard, OpenSuggestions } from "./plan-review";
 import { CalendarLink, CycleProgress, DayHero, PlanDays, WeekdaySheet, WeekStrip } from "./week";
 
@@ -131,6 +132,8 @@ function PlanDashboard({ plan }: { plan: StoredPlan }) {
             />
           </>
         )}
+        <RecoveryCard today={today} />
+        <ProteinCard today={today} />
         <CycleProgress plan={plan} week={position.week} deload={position.deload} />
         <PlanDays plan={plan} onEditWeekdays={() => setEditWeekdays(true)} />
         <WeekVolume

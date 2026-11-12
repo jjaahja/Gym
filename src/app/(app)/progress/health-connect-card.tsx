@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HeartPulseIcon } from "@/components/icons";
 import { buttonStyles, Card } from "@/components/ui";
 import { availability, HEALTH_CONNECT_STORE_URL, isAndroidApp, openSettings, type Availability } from "@/lib/health/health-connect";
+import { EXTRA_LABELS, EXTRA_TYPES, useHealthExtras } from "@/lib/health/extras";
 import { useHealthSync } from "@/lib/health/use-health-sync";
 
 // Nur in der Android-App: Gewicht und Körperfett aus Health Connect (z. B. Withings-Waage) übernehmen.
@@ -133,6 +134,7 @@ export function HealthConnectCard() {
         </div>
       )}
       {available && <WorkoutExport />}
+      {available && <HealthExtras />}
     </Card>
   );
 }
@@ -197,5 +199,61 @@ function WorkoutExport() {
         </>
       )}
     </div>
+  );
+}
+
+/** Ernährung, Schlaf, Ruhepuls lesen (ab App 1.3) – für Eiweiß-Ziel und Erholungshinweis im Plan. */
+function HealthExtras() {
+  const { supported, status, reading, error, lastRead } = useHealthExtras();
+  useEffect(() => {
+    void useHealthExtras.getState().load();
+  }, []);
+  if (supported === null) return null;
+  const granted = status ? EXTRA_TYPES.filter((t) => status[t]) : [];
+  return (
+    <section aria-labelledby="hc-extras" className="mt-4 space-y-3 border-t border-border pt-4">
+      <div>
+        <h3 id="hc-extras" className="font-semibold">Ernährung, Schlaf & Ruhepuls</h3>
+        <p className="text-sm text-muted">Eiweiß aus deiner Ernährungs-App, Erholungshinweis aus Schlaf und Ruhepuls deiner Uhr.</p>
+      </div>
+      {!supported ? (
+        <p className="rounded-lg bg-surface-2 p-3 text-sm">Dafür brauchst du die App-Version 1.3 – das Update findest du unter Profil.</p>
+      ) : (
+        <>
+          {granted.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {EXTRA_TYPES.map((t) => (
+                <li key={t} className="flex items-center justify-between">
+                  <span>{EXTRA_LABELS[t]}</span>
+                  <span className={status?.[t] ? "text-good" : "text-muted"}>{status?.[t] ? "erlaubt" : "nicht erlaubt"}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {granted.length === 0 && (
+            <ul className="space-y-1 text-sm text-muted">
+              <li>• Liest nur Tageswerte: Eiweiß und Kalorien, Schlafdauer, Ruhepuls.</li>
+              <li>• Schlaf und Ruhepuls bleiben auf diesem Gerät; Eiweiß wird wie selbst eingetragen gespeichert.</li>
+              <li>• Selbst eingetragenes Eiweiß hat immer Vorrang.</li>
+            </ul>
+          )}
+          {lastRead && granted.length > 0 && <p className="text-xs text-muted">Zuletzt gelesen: {since(lastRead)}</p>}
+          {error && (
+            <p className="text-sm text-danger" role="alert">
+              {error}
+            </p>
+          )}
+          {granted.length < EXTRA_TYPES.length ? (
+            <button type="button" className={`${buttonStyles.secondary} w-full`} onClick={() => void useHealthExtras.getState().enable()}>
+              {granted.length === 0 ? "Lesen erlauben" : "Weitere erlauben"}
+            </button>
+          ) : (
+            <button type="button" className={`${buttonStyles.secondary} w-full`} disabled={reading} onClick={() => void useHealthExtras.getState().refresh(true)}>
+              {reading ? "Lese …" : "Jetzt lesen"}
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }

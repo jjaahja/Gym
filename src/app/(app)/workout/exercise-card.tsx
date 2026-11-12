@@ -17,6 +17,9 @@ import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { formatGuidelineMessage, resolveExerciseGuidelines, resolveMuscleGuidelines } from "@/lib/science";
 import { formatEffort, rirToRpe } from "@/lib/training/effort";
 import { suggestLoad, type LoadSuggestion } from "@/lib/training/load-suggestion";
+import { TECHNIQUE_HOWTO, TECHNIQUE_REST_SECONDS } from "@/lib/training/plan-edit";
+import { calibrationSuitable, correctRir, MYO, myoContinues, rirBias } from "@/lib/training/rir-calibration";
+import { RirCheckSheet } from "./rir-check";
 import { suggestNextSet } from "@/lib/training/progression";
 import { barFor, platesPerSide, warmupSets } from "@/lib/training/warmup";
 import type { SupersetInfo } from "@/lib/workout/arrange";
@@ -141,6 +144,10 @@ export function ExerciseCard({
   const records = history ? recordsToday(sets, bestsFrom(history, exercise.id, sessionId)) : new Map();
   const working = sets.filter((s) => s.setType === "working");
   const done = working.length >= p.sets;
+  // RIR-Kalibrierung: persönliche Schätzabweichung (ab 3 Tests) fließt in den Gewichtsvorschlag ein
+  const calibrations = useLiveQuery(() => getDb().calibrations.toArray(), [], []);
+  const bias = rirBias(calibrations);
+  const correction = bias?.correction ?? 0;
   // Gewicht aus der bisherigen Leistung (nicht in der Deload-Woche und nicht bei Körpergewichtsübungen mit Zusatzlast)
   const load: LoadSuggestion | null =
     !deload && exercise.trackingType === "weight_reps" && !timed
@@ -154,8 +161,8 @@ export function ExerciseCard({
           loadIncrementKg: exercise.loadIncrementKg,
           targetLoadKg: planned?.targetLoadKg ?? null,
           heavyCompound: exercise.mechanic === "compound" && (exercise.systemicFatigue >= 4 || exercise.equipment.includes("barbell")),
-          previous: lastWorking,
-          today: sets,
+          previous: correctRir(lastWorking, correction),
+          today: correctRir(sets, correction),
         })
       : null;
   const suggestion = load
@@ -165,14 +172,33 @@ export function ExerciseCard({
         sets,
       );
 
-  const techniqueDone = sets.some((s) => TECHNIQUE_SET_TYPES.includes(s.setType));
+  const techniqueSets = sets.filter((s) => TECHNIQUE_SET_TYPES.includes(s.setType));
+  const myo = p.technique === "myo_reps";
+  // Myo-Reps: mehrere Mini-Sätze, bis die Wiederholungen einbrechen; andere Techniken: ein Satz
+  const techniqueDone = myo ? techniqueSets.length > 0 && !myoContinues(techniqueSets.map((s) => s.reps)) : techniqueSets.length > 0;
+  const [rirCheckOpen, setRirCheckOpen] = useState(false);
   // Im Arbeitssatz eingetipptes Gewicht (kg) – Grundlage für Aufwärmsätze, wenn es noch keinen Vorschlag gibt
   const [typedWeight, setTypedWeight] = useState<number | null>(null);
 
   /** Nach jedem eingetragenen Satz: Karte offen halten, Pause starten. */
-  const afterLog = (type: SetType) => {
+  const afterLog = (type: SetType, reps: number | null = null) => {
     onActivity();
-    if (type === p.technique) setMode("working");
+    if (type === p.technique) {
+      // Myo-Reps: nächster Mini-Satz nach 3–5 Atemzügen, solange die Wiederholungen halten
+      if (myo && myoContinues([...techniqueSets.map((s) => s.reps), reps])) {
+        useRestTimer.getState().start(MYO.restSeconds, `Myo-Reps: 3–5 Atemzüge, dann Mini-Satz ${techniqueSets.length + 2}`);
+        return;
+      }
+      setMode("working");
+    }
+    // Letzter Arbeitssatz mit Technik danach: direkt zum Technik-Satz, kurze Pause
+    if (type === "working" && p.technique && working.length + 1 >= p.sets && !techniqueDone) {
+      setMode("technique");
+      const rest = TECHNIQUE_REST_SECONDS[p.technique as keyof typeof TECHNIQUE_REST_SECONDS] ?? 0;
+      if (rest > 0) useRestTimer.getState().start(rest, `Gleich: ${SET_TYPE_LABELS[p.technique]}`);
+      else useRestTimer.getState().stop();
+      return;
+    }
     // Supersatz: kurz durchatmen, dann direkt die nächste Übung der Gruppe
     if (type !== "warmup" && superset && !superset.isLast && onSupersetNext) {
       useRestTimer.getState().start(15, `Supersatz – weiter mit ${supersetNextName ?? "der nächsten Übung"}`);
@@ -201,6 +227,14 @@ export function ExerciseCard({
   const [mode, setMode] = useState<"working" | "warmup" | "technique">("working");
   const [videoOpen, setVideoOpen] = useState(false);
   const nextType: SetType = mode === "warmup" ? "warmup" : mode === "technique" && p.technique ? p.technique : "working";
+  // Technik-Satz: gleiches Gewicht wie der letzte Arbeitssatz, beim Dropsatz etwa 25 % weniger
+  const lastWorkingWeight = [...working].reverse().find((s) => s.weightKg != null)?.weightKg ?? null;
+  const techniqueWeight =
+    lastWorkingWeight == null
+      ? null
+      : p.technique === "dropset"
+        ? Math.max(0, Math.round((lastWorkingWeight * 0.75) / exercise.loadIncrementKg) * exercise.loadIncrementKg)
+        : lastWorkingWeight;
 
   // Junk Volume: harte Sätze heute je Hauptmuskel gegen den Richtwert pro Einheit
   const today = muscleVolume(sessionExercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })));
@@ -406,7 +440,7 @@ export function ExerciseCard({
             <ModeChip active={mode === "warmup"} onClick={() => setMode("warmup")}>
               Aufwärmen
             </ModeChip>
-            {p.technique && working.length > 0 && !techniqueDone && (
+            {p.technique && working.length > 0 && (!techniqueDone || mode === "technique") && (
               <ModeChip active={mode === "technique"} onClick={() => setMode("technique")}>
                 {SET_TYPE_LABELS[p.technique]}
               </ModeChip>
@@ -440,6 +474,47 @@ export function ExerciseCard({
             </div>
           )}
 
+          {mode === "technique" && p.technique && p.technique in TECHNIQUE_HOWTO && (
+            <div className="rounded-xl bg-accent-soft px-3 py-2 text-sm" role="note">
+              <p className="font-semibold">
+                {SET_TYPE_LABELS[p.technique]}
+                {myo && ` · Mini-Satz ${techniqueSets.length + 1} (höchstens ${MYO.maxMiniSets})`}
+              </p>
+              <p className="mt-0.5 text-muted">{TECHNIQUE_HOWTO[p.technique as keyof typeof TECHNIQUE_HOWTO]}</p>
+              {myo && techniqueSets.length > 0 && (
+                <button type="button" onClick={() => setMode("working")} className="mt-1 min-h-9 font-semibold text-accent">
+                  Myo-Reps beenden
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* RIR-Check: im letzten Arbeitssatz bis zum Versagen – wie gut war die Schätzung? */}
+          {mode === "working" && !timed && exercise.trackingType === "weight_reps" && calibrationSuitable(exercise) && working.length === p.sets - 1 && (
+            <button
+              type="button"
+              onClick={() => setRirCheckOpen(true)}
+              className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl bg-surface-2 px-3 text-left text-sm"
+            >
+              <span>
+                <span className="font-semibold text-accent">RIR-Check</span>
+                <span className="text-muted"> · Letzter Satz bis zum Versagen: Wie gut schätzt du?</span>
+              </span>
+              <span aria-hidden="true" className="text-muted">›</span>
+            </button>
+          )}
+          {rirCheckOpen && (
+            <RirCheckSheet
+              exercise={exercise}
+              unit={unit}
+              defaultWeightKg={suggestion.weightKg}
+              bias={bias}
+              onClose={() => setRirCheckOpen(false)}
+              ensureLog={() => workoutStore.getState().ensureExercise(exercise.id, planned?.id ?? null)}
+              onLogged={() => afterLog("working")}
+            />
+          )}
+
           <SetEntry
             key={`${sets.length}-${nextType}-${last === undefined ? "laden" : "bereit"}-${loadTarget}`}
             exercise={exercise}
@@ -448,11 +523,26 @@ export function ExerciseCard({
             weighted={weighted}
             timed={timed}
             setType={nextType}
-            repsHint={nextType === "working" && load?.expectedReps ? String(load.expectedReps) : `${p.repsMin}–${p.repsMax}`}
+            repsHint={
+              nextType === "working" && load?.expectedReps
+                ? String(load.expectedReps)
+                : nextType === "myo_reps"
+                  ? `${MYO.repsMin}–${MYO.repsMax}`
+                  : `${p.repsMin}–${p.repsMax}`
+            }
             target={nextType === "working" && load?.weightKg != null ? load : null}
             barKg={barFor(exercise)}
             onWeightChange={nextType === "working" ? setTypedWeight : undefined}
-            defaultWeightKg={nextType === "warmup" ? (suggestion.weightKg ? Math.round((suggestion.weightKg * 0.5) / exercise.loadIncrementKg) * exercise.loadIncrementKg : null) : suggestion.weightKg}
+            defaultWeightKg={
+              nextType === "warmup"
+                ? suggestion.weightKg
+                  ? Math.round((suggestion.weightKg * 0.5) / exercise.loadIncrementKg) * exercise.loadIncrementKg
+                  : null
+                : mode === "technique"
+                  ? techniqueWeight
+                  : suggestion.weightKg
+            }
+            calibrationNote={nextType === "working" && load?.weightKg != null && correction !== 0 ? correction : null}
             suggestionReason={nextType === "working" && working.length > 0 ? suggestion.reason : null}
             onLogged={afterLog}
             ensureLog={() => workoutStore.getState().ensureExercise(exercise.id, planned?.id ?? null)}
@@ -499,6 +589,7 @@ function SetEntry({
   onWeightChange,
   onLogged,
   ensureLog,
+  calibrationNote = null,
 }: {
   exercise: Exercise;
   unit: UnitSystem;
@@ -515,8 +606,10 @@ function SetEntry({
   barKg: number | null;
   /** eingetipptes Gewicht in kg melden (für Aufwärmsätze) */
   onWeightChange?: (kg: number | null) => void;
-  onLogged: (type: SetType) => void;
+  onLogged: (type: SetType, reps: number | null) => void;
   ensureLog: () => string;
+  /** Gewichtsvorschlag berücksichtigt die persönliche RIR-Abweichung (Wdh.) */
+  calibrationNote?: number | null;
 }) {
   const step = displayIncrement(exercise.loadIncrementKg, unit);
   const [weight, setWeight] = useState(defaultWeightKg != null && defaultWeightKg > 0 ? formatInput(toDisplayWeight(defaultWeightKg, unit)) : "");
@@ -552,7 +645,7 @@ function SetEntry({
         durationSeconds: timed ? Math.round(r!) : null,
         rir: timed ? null : rir,
       });
-      onLogged(setType);
+      onLogged(setType, timed ? null : r);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Satz konnte nicht gespeichert werden");
     }
@@ -604,6 +697,12 @@ function SetEntry({
             {target.lastSet && target.targetRir === 0 ? "Letzter Satz: bis zum Versagen" : `Ziel: ${target.effortLabel}`}
           </span>
           {target.expectedReps != null && <span className="text-muted"> · ca. {target.expectedReps} Wdh. mit {formatWeight(target.weightKg!, unit)}</span>}
+          {calibrationNote != null && (
+            <span className="mt-0.5 block text-xs text-muted">
+              Mit deiner RIR-Kalibrierung: Du hast meist {Math.abs(calibrationNote).toLocaleString("de-DE")} Wdh. {calibrationNote > 0 ? "mehr" : "weniger"} im
+              Tank als geschätzt.
+            </span>
+          )}
         </p>
       )}
       {suggestionReason && <p className="text-xs text-muted">Vorschlag: {suggestionReason}</p>}

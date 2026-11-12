@@ -9,6 +9,9 @@ import type { CompletedSession } from "@/lib/offline/db";
 import { exerciseSeries, exercisesWithHistory, type ProgressPoint } from "@/lib/training/analytics";
 import { detectStagnation, isRegressing } from "@/lib/training/progression";
 import { toDisplayWeight, weightUnitLabel } from "@/lib/units";
+import { getDb } from "@/lib/offline/db";
+import { useLiveQuery } from "@/lib/offline/use-live-query";
+import { actualRir, MIN_CALIBRATIONS, rirBias } from "@/lib/training/rir-calibration";
 import { useSettings } from "@/stores/settings";
 import { formatDate, formatDateMedium, formatDateShort, num, signed } from "./format";
 
@@ -58,6 +61,7 @@ export function StrengthTab({ sessions }: { sessions: readonly CompletedSession[
         onMetric={setMetric}
         unit={unit}
       />
+      <CalibrationCard />
     </div>
   );
 }
@@ -203,4 +207,56 @@ function StatusNote({ stagnating, regressing, sessions }: { stagnating: boolean;
     );
   }
   return <p className="text-sm text-muted">Läuft: Innerhalb der letzten drei Einheiten gab es einen neuen Bestwert.</p>;
+}
+
+/** RIR-Kalibrierung: Wie gut schätzt du die Wiederholungen im Tank? */
+function CalibrationCard() {
+  const calibrations = useLiveQuery(() => getDb().calibrations.orderBy("createdAt").reverse().toArray(), [], []);
+  const bias = rirBias(calibrations);
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold">RIR-Kalibrierung</h2>
+      {!bias ? (
+        <p className="mt-1 text-sm text-muted">
+          Im letzten Satz einer Maschinen-, Kabel- oder Isolationsübung erscheint „RIR-Check“: erst schätzen, dann bis zum
+          Versagen. So lernst du, wie viele Wiederholungen du wirklich im Tank hast – und die Gewichtsvorschläge werden
+          genauer.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-[0.9375rem]">
+            {Math.abs(bias.mean) < 0.5
+              ? "Du schätzt sehr genau."
+              : bias.mean > 0
+                ? `Du hast im Schnitt ${num(bias.mean)} Wdh. mehr im Tank als geschätzt.`
+                : `Du bist im Schnitt ${num(Math.abs(bias.mean))} Wdh. näher am Versagen als geschätzt.`}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {bias.count} {bias.count === 1 ? "Test" : "Tests"}
+            {bias.correction !== 0
+              ? ` · Gewichtsvorschläge rechnen mit ${bias.correction > 0 ? "+" : ""}${num(bias.correction)} Wdh.`
+              : bias.count < MIN_CALIBRATIONS
+                ? ` · ab ${MIN_CALIBRATIONS} Tests fließt das in die Gewichtsvorschläge ein`
+                : ""}
+          </p>
+          <ul className="mt-2 divide-y divide-border text-sm">
+            {calibrations.slice(0, 5).map((c) => (
+              <li key={c.id} className="flex justify-between gap-2 py-2">
+                <span className="min-w-0 truncate">
+                  {getExerciseById(c.exerciseId)?.nameDe} <span className="text-muted">· {formatDateShort(Date.parse(`${c.performedOn}T12:00:00`))}</span>
+                </span>
+                <span className="tabular shrink-0">
+                  {num(c.predictedRir)} → <strong>{actualRir(c)}</strong>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="mt-2 text-xs text-muted">
+        Im Mittel unterschätzen Trainierende die Wiederholungen im Tank um etwa eine; nahe am Versagen wird die Schätzung
+        genauer (Halperin et al. 2022, Meta-Analyse).
+      </p>
+    </Card>
+  );
 }

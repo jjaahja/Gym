@@ -67,3 +67,25 @@ Fortschritt → Körper → „Fortschrittsfotos“.
   Zeile in `progress_photos`. Reihenfolge: erst die Datei (Pseudo-Tabelle `photo_files`), dann die Zeile – andere
   Geräte sehen nie eine Zeile ohne Datei; beim Löschen umgekehrt. Andere Geräte laden die Datei erst beim Anzeigen.
 - **Android:** Kamera-Berechtigung (`CAMERA`, ab APK 1.3); Capacitor reicht die Anfrage der Web-Ansicht weiter.
+
+## Wissenschaft im Alltag
+
+- **Myo-Reps & Co. geführt** (`src/lib/training/rir-calibration.ts`, `plan-edit.ts`): Nach dem letzten Arbeitssatz
+  springt die Übung zum Technik-Satz – mit Kurzanleitung, kurzer Pause (Myo-Reps 15 s, Rest-Pause 20 s, Dropsatz 10 s)
+  und passendem Gewicht (gleich; beim Dropsatz −25 %). Myo-Reps: Mini-Sätze à 3–5 Wdh., bis die Wiederholungen unter 3
+  fallen oder nach 5 Mini-Sätzen.
+- **RIR-Check:** Im letzten Satz einer Maschinen-, Kabel- oder Isolationsübung (keine Langhantel, keine hohe
+  Gesamtermüdung): erst schätzen, dann bis zum Versagen. Tatsächlicher RIR = Wdh. bis Versagen − Wdh. beim Stopp.
+  Ab 3 Tests rechnen die Gewichtsvorschläge mit der persönlichen Abweichung (Mittel der letzten 10, gerundet auf 0,5,
+  begrenzt auf −1 … +2; RIR 0 bleibt 0). Tabelle `rir_calibrations` (Migration `20261112000002`). Beleg: Im Mittel
+  unterschätzen Trainierende die Wiederholungen bis zum Versagen um ~0,95 (Halperin et al. 2022, DOI
+  10.1007/s40279-021-01559-x).
+- **Eiweiß:** Tageskarte im Plan, Ziel 1,6–2,2 g je kg (Morton et al. 2018, DOI 10.1136/bjsports-2017-097608) aus dem
+  letzten Körpergewicht, Schnelleintrag (+10/20/30 g), Wochenschnitt. Mit App 1.3 aus Health Connect (z. B. aus einer
+  Ernährungs-App); eigene Einträge haben Vorrang.
+- **Erholung:** Mit App 1.3 Schlaf und Ruhepuls aus Health Connect (Tageswerte, bleiben auf dem Gerät). Hinweis bei
+  < 6 h Schlaf bzw. 90 min unter dem eigenen Schnitt (Median 14 Nächte) und bei Ruhepuls ≥ 5 Schläge über dem Schnitt
+  (14 Tage). Schlafmangel senkt die Leistung im Mittel um 7,6 %, vor allem abends (Craven et al. 2022, DOI
+  10.1007/s40279-022-01706-y). Der Ruhepuls ist ein Erfahrungswert – die App formuliert es als Hinweis, nicht als Regel.
+- **Android:** `GymHealth` liest per `aggregateGroupByPeriod` (Schlaf von Mittag bis Mittag, damit eine Nacht nicht
+  auf zwei Tage fällt); Berechtigungen `READ_NUTRITION`, `READ_SLEEP`, `READ_RESTING_HEART_RATE` ab APK 1.3.

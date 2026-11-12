@@ -49,6 +49,11 @@ export default function PrivacyPage() {
           aus Health Connect – sonst keine Gesundheitsdaten.
         </li>
         <li>
+          Nur wenn du es unter „Ernährung, Schlaf &amp; Ruhepuls“ erlaubst (App ab 1.3), liest die App Tageswerte zu
+          Eiweiß und Kalorien, Schlafdauer und Ruhepuls. Eiweiß und Kalorien werden wie selbst eingetragen in deinem Konto
+          gespeichert; Schlaf und Ruhepuls bleiben nur auf deinem Gerät und dienen dem Erholungshinweis.
+        </li>
+        <li>
           Nur wenn du „Trainings speichern“ einschaltest, schreibt die App deine Trainings in Health Connect: Start, Ende,
           Name des Trainingstags, je Satz die Übung und die Wiederholungen sowie geschätzte aktive Kalorien (aus Dauer,
           Körpergewicht und Intensität). Andere Apps, denen du in Health Connect Zugriff gibst, können diese Trainings

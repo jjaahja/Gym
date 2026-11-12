@@ -83,13 +83,14 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
   const owner = deps.owner.get();
   const localPlanOwner = plans.getState().plan?.userId;
   if ((owner && owner !== userId) || (localPlanOwner && localPlanOwner !== userId)) {
-    await db.transaction("rw", [db.outbox, db.sessions, db.measurements, db.notes, db.nutrition, db.photos], async () => {
+    await db.transaction("rw", [db.outbox, db.sessions, db.measurements, db.notes, db.nutrition, db.photos, db.calibrations], async () => {
       await db.outbox.clear();
       await db.sessions.clear();
       await db.measurements.clear();
       await db.notes.clear();
       await db.nutrition.clear();
       await db.photos.clear();
+      await db.calibrations.clear();
     });
     plans.getState().clear();
     workout.setState({ session: null });
@@ -181,6 +182,26 @@ export async function pullFromServer(deps: PullDeps): Promise<PullResult> {
         })),
       );
     });
+  }
+
+  // RIR-Checks: nur hinzukommend (werden nicht bearbeitet); ausstehende bleiben lokal
+  if (remote.calibrations) {
+    const pendingCal = new Set(pending.filter((e) => e.table === "rir_calibrations").map((e) => e.rowId));
+    const n = (v: number | string | null) => (v == null ? null : Number(v));
+    await db.calibrations.bulkPut(
+      remote.calibrations
+        .filter((c) => !pendingCal.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          exerciseId: c.exercise_id,
+          performedOn: c.performed_on,
+          weightKg: n(c.weight_kg),
+          stopReps: c.stop_reps,
+          predictedRir: Number(c.predicted_rir),
+          failureReps: c.failure_reps,
+          createdAt: new Date(c.created_at).toISOString(),
+        })),
+    );
   }
 
   // 4) Server kennt den Plan dieses Geräts nicht → vor alle wartenden Einträge stellen

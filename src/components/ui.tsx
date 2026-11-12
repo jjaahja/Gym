@@ -220,9 +220,9 @@ export function Stepper({
   const btn = "grid h-9 w-11 place-items-center text-xl font-medium text-fg active:bg-fg/10 disabled:opacity-30";
   return (
     <div className="flex min-h-11 items-center justify-between gap-3">
-      <span className="text-[1.0625rem]">{label}</span>
-      <div className="flex items-center gap-2">
-        <output aria-live="polite" aria-label={label} className="tabular min-w-12 text-right text-[1.0625rem] font-semibold">
+      <span className="min-w-0 text-[1.0625rem]">{label}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <output aria-live="polite" aria-label={label} className="tabular min-w-12 whitespace-nowrap text-right text-[1.0625rem] font-semibold">
           {format(value)}
         </output>
         <div className="flex items-center overflow-hidden rounded-[0.5rem] bg-surface-2">

@@ -1,3 +1,4 @@
+import type { Calibration } from "@/lib/training/rir-calibration";
 import Dexie, { type DexieOptions, type EntityTable } from "dexie";
 import type { SetType } from "@/lib/db/enums";
 
@@ -20,6 +21,7 @@ export type SyncTable =
   | "exercise_notes"
   | "nutrition_days"
   | "progress_photos"
+  | "rir_calibrations"
   /** Bilddatei im privaten Speicher (kein DB-Table): Upload bzw. Löschen über die Storage-API */
   | "photo_files";
 
@@ -129,6 +131,7 @@ export class GymDB extends Dexie {
   notes!: EntityTable<ExerciseNote, "exerciseId">;
   nutrition!: EntityTable<NutritionDay, "day">;
   photos!: EntityTable<ProgressPhoto, "id">;
+  calibrations!: EntityTable<Calibration, "id">;
 
   constructor(name = "gym", options?: DexieOptions) {
     super(name, options);
@@ -151,6 +154,15 @@ export class GymDB extends Dexie {
       notes: "exerciseId",
       nutrition: "day",
       photos: "id, takenOn, pose",
+    });
+    this.version(5).stores({
+      outbox: "++seq, table, rowId",
+      sessions: "id, endedAt, *exerciseIds",
+      measurements: "id, measuredOn",
+      notes: "exerciseId",
+      nutrition: "day",
+      photos: "id, takenOn, pose",
+      calibrations: "id, exerciseId, createdAt",
     });
   }
 }

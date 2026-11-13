@@ -9,6 +9,8 @@ function plan(weekdays?: (1 | 2 | 3 | 4 | 5 | 6 | 7)[]) {
   const data = new Map<string, string>();
   const store = createPlanStore({
     sink: () => {},
+    // Plan vor dem Testdatum angelegt (sonst hängt der Test von der echten Uhrzeit ab)
+    now: () => new Date("2026-11-09T08:00:00"),
     storage: () => ({ getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }),
   });
   const assessment = {

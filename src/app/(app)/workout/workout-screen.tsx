@@ -25,6 +25,7 @@ import { rememberSetTimes } from "@/lib/health/workout-sync";
 import { ensureNotifications, keepAwake, resetWakeLock } from "@/lib/native/device";
 import { RemoveSheet } from "./remove-sheet";
 import { planSupersets } from "@/lib/training/plan-edit";
+import { useLoadContext } from "@/lib/training/use-load-context";
 import { ArrangeSheet } from "./arrange-sheet";
 import { arrangeItems, supersetInfo } from "@/lib/workout/arrange";
 import { ReorderIcon } from "@/components/icons";
@@ -189,6 +190,7 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
   // Supersätze: heute festgelegte, sonst die aus dem Plan
   const groups = useMemo(() => session.supersets ?? planSupersets(day?.exercises ?? []), [session.supersets, day]);
   const supersets = useMemo(() => supersetInfo(items.map((i) => i.key), groups), [items, groups]);
+  const loadContext = useLoadContext();
   const [arrangeOpen, setArrangeOpen] = useState(false);
   const [swapKey, setSwapKey] = useState<string | null>(null);
   const swapItem = items.find((i) => i.key === swapKey && i.original);
@@ -263,6 +265,7 @@ function ActiveWorkout({ session }: { session: ActiveSession }) {
           onSwap={item.original ? () => setSwapKey(item.key) : undefined}
           substitutedFor={item.original && item.original.id !== item.exercise.id ? item.original : null}
           deload={session.deload ?? false}
+          loadContext={loadContext}
           onRemove={() => setRemoveKey(item.key)}
           superset={supersets.get(item.key) ?? null}
           onSupersetNext={(() => {

@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { Sex } from "@/lib/training/start-weight";
 import type { EffortScale, UnitSystem } from "@/lib/db/enums";
 import type { LoadTarget } from "@/lib/training/load-suggestion";
 
@@ -30,6 +31,8 @@ interface SettingsState {
   appearance: Appearance;
   /** Trainings pro Woche als Ziel; null = so viele wie Trainingstage im Plan */
   weeklyGoal: number | null;
+  /** Geschlecht für geschätzte Startgewichte (Kraftnormen); null = keine Angabe (vorsichtiger) – nur auf diesem Gerät */
+  sex: Sex | null;
   /** Erinnerung an Trainingstagen (nur Android-App) */
   reminders: { enabled: boolean; time: string };
   setUnitSystem(unitSystem: UnitSystem): void;
@@ -38,6 +41,7 @@ interface SettingsState {
   setAccent(accent: Accent): void;
   setAppearance(appearance: Appearance): void;
   setWeeklyGoal(goal: number | null): void;
+  setSex(sex: Sex | null): void;
   setReminders(reminders: { enabled: boolean; time: string }): void;
 }
 
@@ -50,6 +54,7 @@ export const useSettings = create<SettingsState>()(
       accent: "orange",
       appearance: "system",
       weeklyGoal: null,
+      sex: null,
       reminders: { enabled: false, time: "17:00" },
       setUnitSystem: (unitSystem) => set({ unitSystem }),
       setEffortScale: (effortScale) => set({ effortScale }),
@@ -62,20 +67,22 @@ export const useSettings = create<SettingsState>()(
         set({ appearance });
         applyTheme(get().accent, appearance);
       },
+      setSex: (sex) => set({ sex }),
       setWeeklyGoal: (weeklyGoal) => set({ weeklyGoal: weeklyGoal == null ? null : Math.min(7, Math.max(1, Math.round(weeklyGoal))) }),
       setReminders: (reminders) => set({ reminders: { enabled: reminders.enabled, time: /^\d{2}:\d{2}$/.test(reminders.time) ? reminders.time : "17:00" } }),
     }),
     {
       name: "gym-settings",
-      version: 4,
+      version: 5,
       // v2: Gewichtsvorschlag (Standard: letzter Satz bis zum Versagen); v3: Akzentthema, Erscheinungsbild;
-      // v4: Wochenziel, Erinnerungen
+      // v4: Wochenziel, Erinnerungen; v5: Geschlecht für Startgewichte
       migrate: (state) =>
         ({
           loadTarget: "failure_last_set",
           accent: "orange",
           appearance: "system",
           weeklyGoal: null,
+          sex: null,
           reminders: { enabled: false, time: "17:00" },
           ...(state as Partial<SettingsState>),
         }) as SettingsState,

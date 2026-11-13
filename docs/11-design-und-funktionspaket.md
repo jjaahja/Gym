@@ -138,6 +138,24 @@ lesen für Ernährung, Schlaf und Ruhepuls (`READ_NUTRITION`, `READ_SLEEP`, `REA
 (Export, Fotos) und Erinnerungen an Trainingstagen. Gleicher Signierschlüssel wie 1.2 (Zertifikat-SHA-256
 `5242fd20…6f3f`), APK unter `/downloads/gym-1.3.apk`, Prüfsumme in `version.json`.
 
+## Gewichtsempfehlung für jede Übung (`src/lib/training/start-weight.ts`)
+
+- **Mit eigenem Verlauf** wie bisher (`load-suggestion.ts`): aus dem letzten Satz von heute bzw. dem besten vom letzten Mal.
+- **Neue Übung ohne Verlauf:** Startgewicht geschätzt – zuerst aus einer verwandten Übung, die du schon gemacht hast
+  (gleiches Bewegungsmuster, möglichst viele gemeinsame Hauptmuskeln), umgerechnet über typische Kraftverhältnisse
+  (`STRENGTH_RATIO`, z. B. Kurzhantel-Bankdrücken je Hantel ≈ 38 % des Langhantel-Bankdrückens); sonst aus
+  Körpergewicht, Erfahrung und Geschlecht (Kraftnormen, Frauen im Oberkörper ×0,55, im Unterkörper ×0,75; ohne Angabe
+  wie Frauen = vorsichtig). Sicherheitsabschlag 10 % (verwandte Übung) bzw. 20 % (Kraftnorm). Nach dem ersten Satz
+  zählt nur die echte Leistung. Ohne Körpergewicht und ohne verwandte Übung: keine Schätzung (Hinweis).
+- **Körpergewichtsübungen mit Zusatzgewicht** (Dips, Klimmzug, Liegestütz): gerechnet mit Gesamtlast =
+  Körpergewicht × Anteil (Klimmzug 0,95, Dips 0,9, Liegestütz 0,64) + Zusatz; empfohlen wird das Zusatzgewicht oder
+  „ohne Zusatz“ (mit Hinweis, wenn das Ziel ohne Zusatz noch nicht erreicht wird). Erster Satz ohne Verlauf: ohne Zusatz.
+- **Vorher sichtbar:** auf der Tageskarte, in „Deine Trainingstage“ und auf der zugeklappten Übungskarte
+  („62,5 kg“, „≈ 26 kg“ = geschätzt, „+10 kg“ / „ohne Zusatz“).
+- **Kurzhanteln:** Gewicht je Hantel (Feldbeschriftung „Gewicht je Hantel“; Goblet Squat, Pullover und
+  Trizepsdrücken über Kopf mit einer Hantel: Gewicht der Hantel).
+- **Geschlecht** im Profil (Männlich/Weiblich/Keine Angabe) – nur auf diesem Gerät, nur für Startschätzungen.
+
 ## Verifiziert (12.11.2026)
 
 - 366 Unit-Tests; E2E (Playwright, iPhone/Pixel, hell und dunkel): Training, Rekorde, Plan-Editor, Fotos (Fake-Kamera),

@@ -16,9 +16,10 @@ import { bestsFrom, recordsToday } from "@/lib/training/records";
 import { useLiveQuery } from "@/lib/offline/use-live-query";
 import { formatGuidelineMessage, resolveExerciseGuidelines, resolveMuscleGuidelines } from "@/lib/science";
 import { formatEffort, rirToRpe } from "@/lib/training/effort";
-import { suggestLoad, type LoadSuggestion } from "@/lib/training/load-suggestion";
+import { recommendLoad, weightFieldLabel, type Recommendation } from "@/lib/training/start-weight";
+import { recommendationText, type LoadContext } from "@/lib/training/use-load-context";
 import { TECHNIQUE_HOWTO, TECHNIQUE_REST_SECONDS } from "@/lib/training/plan-edit";
-import { calibrationSuitable, correctRir, MYO, myoContinues, rirBias } from "@/lib/training/rir-calibration";
+import { calibrationSuitable, MYO, myoContinues, rirBias } from "@/lib/training/rir-calibration";
 import { RirCheckSheet } from "./rir-check";
 import { suggestNextSet } from "@/lib/training/progression";
 import { barFor, platesPerSide, warmupSets } from "@/lib/training/warmup";
@@ -82,6 +83,7 @@ export function ExerciseCard({
   superset = null,
   onSupersetNext,
   supersetNextName = null,
+  loadContext,
 }: {
   exercise: Exercise;
   planned: StoredPlanExercise | null;
@@ -108,6 +110,8 @@ export function ExerciseCard({
   superset?: SupersetInfo | null;
   onSupersetNext?: () => void;
   supersetNextName?: string | null;
+  /** Verlauf, Körpergewicht, Geschlecht, RIR-Korrektur für die Gewichtsempfehlung */
+  loadContext: LoadContext;
 }) {
   const { unitSystem: unit, effortScale: scale, loadTarget } = useSettings();
   const guidelines = resolveExerciseGuidelines(exercise, goal, experience);
@@ -147,24 +151,28 @@ export function ExerciseCard({
   // RIR-Kalibrierung: persönliche Schätzabweichung (ab 3 Tests) fließt in den Gewichtsvorschlag ein
   const calibrations = useLiveQuery(() => getDb().calibrations.toArray(), [], []);
   const bias = rirBias(calibrations);
-  const correction = bias?.correction ?? 0;
-  // Gewicht aus der bisherigen Leistung (nicht in der Deload-Woche und nicht bei Körpergewichtsübungen mit Zusatzlast)
-  const load: LoadSuggestion | null =
-    !deload && exercise.trackingType === "weight_reps" && !timed
-      ? suggestLoad({
-          mode: loadTarget,
-          repsMin: p.repsMin,
-          repsMax: p.repsMax,
-          rirMin: p.rirMin,
-          rirMax: p.rirMax,
-          sets: p.sets,
-          loadIncrementKg: exercise.loadIncrementKg,
-          targetLoadKg: planned?.targetLoadKg ?? null,
-          heavyCompound: exercise.mechanic === "compound" && (exercise.systemicFatigue >= 4 || exercise.equipment.includes("barbell")),
-          previous: correctRir(lastWorking, correction),
-          today: correctRir(sets, correction),
-        })
-      : null;
+  // Gewichtsempfehlung: eigener Verlauf, sonst geschätztes Startgewicht; bei Dips & Co. das Zusatzgewicht
+  // (nicht in der Deload-Woche – dort bleiben die Gewichte)
+  const load: Recommendation | null = deload
+    ? null
+    : recommendLoad({
+        exercise,
+        sets: p.sets,
+        repsMin: p.repsMin,
+        repsMax: p.repsMax,
+        rirMin: p.rirMin,
+        rirMax: p.rirMax,
+        targetLoadKg: planned?.targetLoadKg ?? null,
+        mode: loadTarget,
+        previous: lastWorking,
+        today: sets,
+        history: loadContext.history ?? [],
+        bodyWeightKg: loadContext.bodyWeightKg,
+        sex: loadContext.sex,
+        experience,
+        correction: loadContext.correction,
+      });
+  const correction = load?.bodyweight ? 0 : loadContext.correction;
   const suggestion = load
     ? { weightKg: load.weightKg, reason: load.reason }
     : suggestNextSet(
@@ -263,7 +271,7 @@ export function ExerciseCard({
           <span className="block truncate font-semibold">{exercise.nameDe}</span>
           <span className="tabular block text-sm text-muted">
             {p.sets} × {timed ? "Zeit" : `${p.repsMin}–${p.repsMax}`} · {scale === "rpe" ? `RPE ${rirToRpe(p.rirMax)}–${rirToRpe(p.rirMin)}` : `RIR ${p.rirMin}–${p.rirMax}`}
-            {planned?.targetLoadKg != null && ` · ${formatWeight(planned.targetLoadKg, unit)}`}
+            {!done && recommendationText(load, unit) && ` · ${recommendationText(load, unit)}`}
           </span>
         </span>
         <span aria-hidden="true" className={`text-muted transition-transform ${expanded ? "rotate-90" : ""}`}>
@@ -516,7 +524,7 @@ export function ExerciseCard({
           )}
 
           <SetEntry
-            key={`${sets.length}-${nextType}-${last === undefined ? "laden" : "bereit"}-${loadTarget}`}
+            key={`${sets.length}-${nextType}-${last === undefined || loadContext.history === null ? "laden" : "bereit"}-${loadTarget}-${loadContext.sex}`}
             exercise={exercise}
             unit={unit}
             scale={scale}
@@ -543,7 +551,7 @@ export function ExerciseCard({
                   : suggestion.weightKg
             }
             calibrationNote={nextType === "working" && load?.weightKg != null && correction !== 0 ? correction : null}
-            suggestionReason={nextType === "working" && working.length > 0 ? suggestion.reason : null}
+            suggestionReason={nextType === "working" && (working.length > 0 || load?.estimated) ? suggestion.reason : null}
             onLogged={afterLog}
             ensureLog={() => workoutStore.getState().ensureExercise(exercise.id, planned?.id ?? null)}
           />
@@ -600,8 +608,8 @@ function SetEntry({
   repsHint: string;
   defaultWeightKg: number | null;
   suggestionReason: string | null;
-  /** Ziel für den nächsten Arbeitssatz (Gewichtsvorschlag aus der bisherigen Leistung) */
-  target: LoadSuggestion | null;
+  /** Ziel für den nächsten Arbeitssatz (Gewichtsempfehlung) */
+  target: Recommendation | null;
   /** Langhantel/SZ-Stange: Scheiben pro Seite anzeigen */
   barKg: number | null;
   /** eingetipptes Gewicht in kg melden (für Aufwärmsätze) */
@@ -656,7 +664,7 @@ function SetEntry({
       <div className="grid grid-cols-2 gap-3">
         {weighted && (
           <NumberField
-            label={bodyweight ? `Zusatz (${weightUnitLabel(unit)})` : `Gewicht (${weightUnitLabel(unit)})`}
+            label={`${weightFieldLabel(exercise)} (${weightUnitLabel(unit)})`}
             value={weight}
             onChange={(v) => {
               setWeight(v);
@@ -696,7 +704,17 @@ function SetEntry({
           <span className="font-semibold">
             {target.lastSet && target.targetRir === 0 ? "Letzter Satz: bis zum Versagen" : `Ziel: ${target.effortLabel}`}
           </span>
-          {target.expectedReps != null && <span className="text-muted"> · ca. {target.expectedReps} Wdh. mit {formatWeight(target.weightKg!, unit)}</span>}
+          {target.expectedReps != null && (
+            <span className="text-muted">
+              {" "}
+              · ca. {target.expectedReps} Wdh.{" "}
+              {target.bodyweight
+                ? target.weightKg
+                  ? `mit +${formatWeight(target.weightKg, unit)} Zusatz`
+                  : "ohne Zusatzgewicht"
+                : `mit ${formatWeight(target.weightKg!, unit)}`}
+            </span>
+          )}
           {calibrationNote != null && (
             <span className="mt-0.5 block text-xs text-muted">
               Mit deiner RIR-Kalibrierung: Du hast meist {Math.abs(calibrationNote).toLocaleString("de-DE")} Wdh. {calibrationNote > 0 ? "mehr" : "weniger"} im

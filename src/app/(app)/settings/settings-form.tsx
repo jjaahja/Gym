@@ -23,7 +23,7 @@ async function syncProfile(patch: { unit_system?: UnitSystem; effort_scale?: Eff
 }
 
 export function SettingsForm() {
-  const { unitSystem, effortScale, loadTarget, setUnitSystem, setEffortScale, setLoadTarget } = useSettings();
+  const { unitSystem, effortScale, loadTarget, sex, setUnitSystem, setEffortScale, setLoadTarget, setSex } = useSettings();
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -91,6 +91,23 @@ export function SettingsForm() {
             {loadTarget === "failure_last_set"
               ? "Das Gewicht wird aus deinen letzten Sätzen berechnet: frühe Sätze mit 1–2 Wiederholungen im Tank, der letzte bis zum Muskelversagen. Bei schweren Grundübungen (z. B. Kniebeuge, Kreuzheben, Bankdrücken) bleibt im letzten Satz 1 im Tank – sicherer, kaum weniger Effekt."
               : "Das Gewicht wird aus deinen letzten Sätzen berechnet, Ziel ist in jedem Satz der Bereich aus deinem Plan (z. B. 1–3 Wiederholungen im Tank)."}
+          </p>
+        </div>
+        <div>
+          <Segmented
+            label="Geschlecht (für Startgewichte)"
+            value={sex ?? "none"}
+            onChange={(v) => setSex(v === "none" ? null : v)}
+            options={[
+              { value: "male", label: "Männlich" },
+              { value: "female", label: "Weiblich" },
+              { value: "none", label: "Keine Angabe" },
+            ]}
+          />
+          <p className="mt-2 text-sm text-muted">
+            Bei Übungen ohne Verlauf schätzt die App ein Startgewicht – zuerst aus ähnlichen Übungen, sonst aus Körpergewicht,
+            Erfahrung und Geschlecht (Kraft im Oberkörper unterscheidet sich im Schnitt deutlich). Ohne Angabe schätzt sie
+            vorsichtiger. Nach dem ersten Satz zählt nur deine echte Leistung. Nur auf diesem Gerät gespeichert.
           </p>
         </div>
       </Card>

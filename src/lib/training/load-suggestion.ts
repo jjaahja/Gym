@@ -37,6 +37,8 @@ export interface LoadSuggestionInput {
   previous: readonly LoggedSetLike[];
   /** Sätze von heute (alle Typen) */
   today: readonly LoggedSetLike[];
+  /** Ohne eigenen Verlauf: geschätztes 1RM (verwandte Übung oder Kraftnorm, schon mit Sicherheitsabschlag) */
+  estimate?: { strength: number; label: string };
 }
 
 export interface LoadSuggestion {
@@ -104,6 +106,19 @@ export function suggestLoad(input: LoadSuggestionInput): LoadSuggestion {
   if (!reference) {
     if (currentWeight != null && currentWeight > 0) {
       return { ...base, weightKg: currentWeight, expectedReps: null, change: "same", reason: "Zielgewicht aus dem Plan" };
+    }
+    if (input.estimate && input.estimate.strength > 0) {
+      const step = input.loadIncrementKg > 0 ? input.loadIncrementKg : 2.5;
+      const middle = (input.repsMin + input.repsMax) / 2;
+      const weight = Math.max(step, roundTo(loadFor(input.estimate.strength, middle, rir), step));
+      const reps = Math.max(1, Math.round(Math.round(expectedRepsAt(input.estimate.strength, weight, rir) * 100) / 100));
+      return {
+        ...base,
+        weightKg: weight,
+        expectedReps: reps,
+        change: "same",
+        reason: `${input.estimate.label} → Startgewicht ${de(weight)} kg, ca. ${reps} Wdh. Nach dem ersten Satz passt die App an.`,
+      };
     }
     return {
       ...base,

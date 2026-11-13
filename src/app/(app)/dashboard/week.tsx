@@ -24,7 +24,9 @@ import {
 } from "@/lib/training/schedule";
 import { formatWeight } from "@/lib/units";
 import { startOptions } from "@/lib/workout/start";
-import { deloadPrescription, type StoredPlan, type StoredPlanDay } from "@/stores/plan-store";
+import { deloadPrescription, type StoredPlan, type StoredPlanDay, type StoredPlanExercise } from "@/stores/plan-store";
+import type { ExperienceLevel, UnitSystem } from "@/lib/db/enums";
+import { firstSetRecommendation, recommendationText, useLoadContext, type LoadContext } from "@/lib/training/use-load-context";
 import { planStore } from "@/stores/plan";
 import { useSettings } from "@/stores/settings";
 import { useWorkout, workoutStore } from "@/stores/workout";
@@ -64,6 +66,14 @@ export function MuscleChips({ muscles, max = 4, tone = "neutral" }: { muscles: r
       {muscles.length > max && <li className={`rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>+{muscles.length - max}</li>}
     </ul>
   );
+}
+
+/** „ · 62,5 kg“ / „ · ≈ 26 kg“ / „ · ohne Zusatz“ – empfohlenes Gewicht für den ersten Satz (Deload: Zielgewicht). */
+function weightText(e: StoredPlanExercise, ctx: LoadContext, experience: ExperienceLevel, deload: boolean, unit: UnitSystem): string {
+  if (deload) return e.targetLoadKg != null ? ` · ${formatWeight(e.targetLoadKg, unit)}` : "";
+  const exercise = getExerciseById(e.exerciseId);
+  const text = exercise ? recommendationText(firstSetRecommendation(exercise, e, ctx, experience), unit) : null;
+  return text ? ` · ${text}` : "";
 }
 
 // ─────────────────────────── Wochenleiste ───────────────────────────
@@ -127,8 +137,9 @@ function sessionStats(sessions: readonly CompletedSession[]) {
   return { minutes: Math.round(minutes), sets, exercises };
 }
 
-function ExercisePreview({ day, deload, limit = 5 }: { day: StoredPlanDay; deload: boolean; limit?: number }) {
+function ExercisePreview({ day, deload, experience, limit = 5 }: { day: StoredPlanDay; deload: boolean; experience: ExperienceLevel; limit?: number }) {
   const unit = useSettings((s) => s.unitSystem);
+  const ctx = useLoadContext();
   const exercises = day.exercises.map((e) => (deload ? deloadPrescription(e) : e));
   return (
     <ol className="space-y-2">
@@ -140,7 +151,7 @@ function ExercisePreview({ day, deload, limit = 5 }: { day: StoredPlanDay; deloa
           <span className="min-w-0 flex-1 truncate font-medium">{getExerciseById(e.exerciseId)?.nameDe}</span>
           <span className="tabular shrink-0 opacity-80">
             {e.sets} × {e.repsMin}–{e.repsMax}
-            {e.targetLoadKg != null && ` · ${formatWeight(e.targetLoadKg, unit)}`}
+            {weightText(e, ctx, experience, deload, unit)}
           </span>
         </li>
       ))}
@@ -256,7 +267,7 @@ export function DayHero({
         <MuscleChips muscles={focus} tone={hero ? "onAccent" : "neutral"} />
       </div>
       <div className={`mt-4 rounded-2xl p-3 ${hero ? "bg-black/10" : "bg-surface-2"}`}>
-        <ExercisePreview day={planned} deload={deload} />
+        <ExercisePreview day={planned} deload={deload} experience={plan.experience} />
       </div>
       {running ? (
         <Link href="/workout" className={`${hero ? "bg-surface text-fg" : buttonStyles.primary} mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold`}>
@@ -306,6 +317,7 @@ export function CycleProgress({ plan, week, deload }: { plan: StoredPlan; week: 
 
 export function PlanDays({ plan, onEditWeekdays }: { plan: StoredPlan; onEditWeekdays: () => void }) {
   const unit = useSettings((s) => s.unitSystem);
+  const ctx = useLoadContext();
   const { start, starting } = useStartDay();
   const [open, setOpen] = useState<string | null>(null);
   const days = [...plan.days].sort((a, b) => (a.weekday ?? 8 + a.dayIndex) - (b.weekday ?? 8 + b.dayIndex));
@@ -349,7 +361,7 @@ export function PlanDays({ plan, onEditWeekdays }: { plan: StoredPlan; onEditWee
                         </Link>
                         <p className="tabular text-xs text-muted">
                           {e.sets} × {e.repsMin}–{e.repsMax} Wdh. · RIR {e.rirMin}–{e.rirMax} · {e.restSeconds} s Pause
-                          {e.targetLoadKg != null && ` · ${formatWeight(e.targetLoadKg, unit)}`}
+                          {weightText(e, ctx, plan.experience, false, unit)}
                           {e.lastSetTechnique && ` · + ${SET_TYPE_LABELS[e.lastSetTechnique]}`}
                         </p>
                       </li>
